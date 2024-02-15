@@ -1,4 +1,4 @@
-# Open Chat Motoko Sample Bot
+# Open Chat Bot Motoko Sample
 
 
 ## 📦 Create a New Project
@@ -8,7 +8,7 @@ Make sure that [Node.js](https://nodejs.org/en/) `>= 16` and [`dfx`](https://int
 Run the following commands in a new, empty project directory:
 
 ```sh
-git clone 
+git clone
 dfx start --clean --background # Run dfx in the background
 npm run setup # Install packages, deploy canisters, and generate type bindings
 
