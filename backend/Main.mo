@@ -9,6 +9,9 @@ import Random "mo:base/Random";
 import List "mo:base/List";
 import Nat32 "mo:base/Nat32";
 import Debug "mo:base/Debug";
+import Iter "mo:base/Iter";
+import Option "mo:base/Option";
+import Int "mo:base/Int";
 import T "./Types";
 import G "./Guards";
 import OC "./OCTypes";
@@ -23,9 +26,10 @@ shared ({ caller }) actor class OCBot() = Self {
   // send message and save messageIDs for edits
 
   let USER_INDEX_CANISTER = "4bkt6-4aaaa-aaaaf-aaaiq-cai";
-  let LOCAL_USER_INDEX_CANISTER = "nq4qv-wqaaa-aaaaf-bhdgq-cai";
-  let GROUP_INDEX_CANISTER = "4ijyc-kiaaa-aaaaf-aaaja-cai";
-  let TEST_GROUP_CANISTER_ID = "evg6t-laaaa-aaaar-a4j5q-cai";
+  let LOCAL_USER_INDEX_ID = "nq4qv-wqaaa-aaaaf-bhdgq-cai";
+  let GROUP_INDEX_ID = Principal.fromText("4ijyc-kiaaa-aaaaf-aaaja-cai");
+  let NNS_PROPOSAL_GROUP_ID = Principal.fromText("labxu-baaaa-aaaaf-anb4q-cai");
+  let TEST_GROUP_ID = "evg6t-laaaa-aaaar-a4j5q-cai";
   let BOT_REGISTRATION_FEE: Nat = 10_000_000_000_000; // 10T
 
   stable var custodians = List.make<Principal>(caller);
@@ -34,6 +38,9 @@ shared ({ caller }) actor class OCBot() = Self {
   stable var botName : Text = "";
   stable var botDisplayName : ?Text = null;
   stable var lastMessageID : Nat = 0;
+
+  stable var latestMessageIndex = 0;
+  stable var latestProposalID = 0;
 
   public shared({caller}) func initBot(name : Text, displayName : ?Text) : async Result.Result<Text, Text>{
     if (not G.isCustodian(caller, custodians)) {
@@ -162,12 +169,12 @@ shared ({ caller }) actor class OCBot() = Self {
     await* editGroupMessage(groupCanisterId, messageId, #Text({text = newContent}));
   };
 
-  func getGroupMessagesByIndex(groupCanisterId : Principal, indexes : [Nat32] ,latest_known_update : Nat64) : async* Result.Result<OC.MessagesResponse, Text> {
+  func getGroupMessagesByIndex(groupCanisterId : Principal, indexes : [Nat32] ,latest_known_update : ?Nat64) : async* Result.Result<OC.MessagesResponse, Text> {
     let group_canister : OC.GroupIndexCanister = actor (Principal.toText(groupCanisterId));
     let res = await group_canister.messages_by_message_index({
       thread_root_message_index = null;
       messages = indexes;
-      latest_known_update = ?latest_known_update;
+      latest_known_update = latest_known_update;
     });
 
     switch(res){
@@ -178,6 +185,104 @@ shared ({ caller }) actor class OCBot() = Self {
         return #err("Error")
       };
     }
+  };
+
+  func getNNSProposalMessageData(message : OC.MessageEventWrapper) : Result.Result<{proposalId : Nat64; messageIndex : OC.MessageIndex}, Text>{
+      let event = message.event;
+      switch(event.content){
+        case(#GovernanceProposal(p)){
+          switch(p.proposal){
+            case(#NNS(proposal)){
+              return #ok({
+                proposalId = proposal.id;
+                messageIndex = event.message_index;
+              })
+            };
+            case(#SNS(_)){
+              return #err("Not a NNS proposal");
+            };
+          }
+        };
+        case(_){
+          return #err("Not a governance proposal");
+        }
+      }
+  };
+
+  func getLatestMessageIndex(groupCanisterId : Principal) : async ?OC.MessageIndex{
+    let group_canister : OC.GroupIndexCanister = actor (Principal.toText(groupCanisterId));
+    let res = await group_canister.public_summary({
+      invite_code = null;
+      correlation_id = 0;
+    });
+
+    switch(res){
+      case(#Success(val)){
+        return val.summary.latest_message_index;
+        };
+        case(_){
+          return null;
+        };
+      };
+  };
+
+  let messageRange : Nat32 = 10;
+  //retrieve last maxRetries * messageRange messages, TODO: optimize
+  public shared({caller}) func findMessageIndexByProposalId(proposalId : Nat) : async Result.Result<OC.MessageIndex, Text> {
+    if (not G.isCustodian(caller, custodians)) {
+      return #err("Not authorized");
+    };
+
+    var index = await getLatestMessageIndex(NNS_PROPOSAL_GROUP_ID);
+    var resolvedIndex = switch(index){
+      case(?index){index};
+      case(_){return #err("Error")};
+    };
+
+
+    var maxRetries = 3;
+    while (maxRetries > 0){
+      maxRetries := maxRetries - 1;
+
+      let indexVec = Iter.range(Nat32.toNat(resolvedIndex) - Nat32.toNat(messageRange) , Nat32.toNat(resolvedIndex) ) |> 
+        Iter.map(_, func (n : Nat) : Nat32 {Nat32.fromNat(n)}) |> 
+          Iter.toArray(_);
+    
+
+      let res = await* getGroupMessagesByIndex(NNS_PROPOSAL_GROUP_ID, indexVec, null);
+      switch(res){
+        case(#ok(val)){
+          for (message in val.messages.vals()){ 
+              let proposalData = getNNSProposalMessageData(message);
+              switch(proposalData){
+                case(#ok(data)){
+                  if(Nat64.toNat(data.proposalId) == proposalId){
+                    return #ok(data.messageIndex);
+                  }
+                };
+                case(#err(_)){
+                  //This should never happen
+                }
+              }
+          }  
+        };
+        //Error retrieving messages
+        case(_){
+
+        }
+      };
+      resolvedIndex := resolvedIndex - messageRange;
+
+      // switch(res){
+      //   case(#ok(val)){
+      //         return #ok(val)
+      //       };
+      //   case(_){
+      //     return #err("Error retrieving messages")
+      //   } 
+      // }
+    };
+     return #err("Max retries reached");
   };
 
   // public shared({caller}) func updateTallies(tallies : [OC.Tally]) : async Result.Result<Text, Text>{
@@ -193,7 +298,7 @@ shared ({ caller }) actor class OCBot() = Self {
       return #err("Not authorized: " # Principal.toText(caller));
     };
 
-    await joinGroup(Principal.fromText(TEST_GROUP_CANISTER_ID), null);
+    await joinGroup(Principal.fromText(TEST_GROUP_ID), null);
   };
 
   public shared({caller}) func testJoinGroup(groupCanisterId : Principal) : async Result.Result<Text, Text>{
@@ -208,7 +313,7 @@ shared ({ caller }) actor class OCBot() = Self {
       return #err("Not authorized: " # Principal.toText(caller));
     };
 
-    let res = await* sendTextMessageToGroup(Principal.fromText(TEST_GROUP_CANISTER_ID), content, null);
+    let res = await* sendTextMessageToGroup(Principal.fromText(TEST_GROUP_ID), content, null);
     #ok(res)
   };
 
@@ -217,7 +322,7 @@ shared ({ caller }) actor class OCBot() = Self {
       return #err("Not authorized: " # Principal.toText(caller));
     };
 
-    let res = await* sendTextMessageToGroup(Principal.fromText(TEST_GROUP_CANISTER_ID), content, ?threadIndexId);
+    let res = await* sendTextMessageToGroup(Principal.fromText(TEST_GROUP_ID), content, ?threadIndexId);
     #ok(res)
   };
 
@@ -226,7 +331,7 @@ shared ({ caller }) actor class OCBot() = Self {
       return #err("Not authorized: " # Principal.toText(caller));
     };
 
-    let res = await* editTextGroupMessage(Principal.fromText(TEST_GROUP_CANISTER_ID), 3453453, newContent);
+    let res = await* editTextGroupMessage(Principal.fromText(TEST_GROUP_ID), 3453453, newContent);
     #ok(res)
   };
 
@@ -235,7 +340,29 @@ shared ({ caller }) actor class OCBot() = Self {
       return #err("Not authorized: " # Principal.toText(caller));
     };
 
-    await* getGroupMessagesByIndex(Principal.fromText(TEST_GROUP_CANISTER_ID), indexes, 0);
+    await* getGroupMessagesByIndex(Principal.fromText(TEST_GROUP_ID), indexes, ?0);
+  };
+
+  public shared({caller}) func testGetNNSProposals(indexes : [Nat32]) : async Result.Result<OC.MessagesResponse, Text>{
+    if (not G.isCustodian(caller, custodians)) {
+      return #err("Not authorized: " # Principal.toText(caller));
+    };
+
+    await* getGroupMessagesByIndex(NNS_PROPOSAL_GROUP_ID, indexes, ?0);
+  };
+
+  public shared({caller}) func testGetProposalsGroupLastId() : async Result.Result<OC.MessageIndex, Text>{
+    if (not G.isCustodian(caller, custodians)) {
+      return #err("Not authorized: " # Principal.toText(caller));
+    };
+
+    var index = await getLatestMessageIndex(NNS_PROPOSAL_GROUP_ID);
+    var resolvedIndex = switch(index){
+      case(?index){index};
+      case(_){return #err("Error")};
+    };
+
+    return #ok(resolvedIndex)
   };
 
   // ADMIN //
@@ -250,7 +377,10 @@ shared ({ caller }) actor class OCBot() = Self {
   };
 
   //METRICS
-  func getCanisterStatus() : async MT.CanisterStatus {
+  public shared({caller}) func getCanisterStatus() : async Result.Result<MT.CanisterStatus, Text> {
+    if (not G.isCustodian(caller, custodians)) {
+      return #err("Not authorized");
+    };
     let management_canister_actor : MT.ManagementCanisterActor = actor("aaaaa-aa");
     let res = await management_canister_actor.canister_status({
       canister_id = Principal.fromActor(Self);
@@ -262,14 +392,14 @@ shared ({ caller }) actor class OCBot() = Self {
       daily_burn = res.idle_cycles_burned_per_day;
       controllers = res.settings.controllers;
     };
-    canister_status
+    #ok(canister_status)
   };
 
   //Waiting for OC support
   // public shared({caller}) func handle_direct_message_msgpack(data : HandleMessageArgs) : async Result.Result<Text, Text>{
   //   //TODO: validate caller
 
-  //   let group_canister : T.GroupIndexCanister = actor (TEST_GROUP_CANISTER_ID);
+  //   let group_canister : T.GroupIndexCanister = actor (TEST_GROUP_ID);
   //   let res = await group_canister.messages_by_message_index(null, [], null);
 
   //   switch(res){
@@ -284,7 +414,7 @@ shared ({ caller }) actor class OCBot() = Self {
 
   // Not supported 
   // public func sendTestGovernanceMessage() : async T.SendMessageResponse{
-  //     let group_canister : T.GroupIndexCanister = actor (TEST_GROUP_CANISTER_ID);
+  //     let group_canister : T.GroupIndexCanister = actor (TEST_GROUP_ID);
   //     let res = await group_canister.send_message_v2({
   //       message_id = lastMessageID; //TODO: save messageIDs for edits, 3453453
   //       thread_root_message_index = null;
