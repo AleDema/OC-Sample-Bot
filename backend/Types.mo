@@ -13,7 +13,7 @@ module{
   };
 
     type ProposalStatus = {
-    #Settled;
+    #Executed;
     #Approved;
     #Rejected;
     #Pending;
@@ -31,7 +31,7 @@ module{
     vote : Vote;
   };
 
-  type Ingress = {
+ public type TallyData = {
     votes : [VoteRecords];
     proposalId : Nat;
     proposalStatus : ProposalStatus;

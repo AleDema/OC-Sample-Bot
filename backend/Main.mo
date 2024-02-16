@@ -12,6 +12,8 @@ import Debug "mo:base/Debug";
 import Iter "mo:base/Iter";
 import Option "mo:base/Option";
 import Int "mo:base/Int";
+import Array "mo:base/Array";
+import Map "mo:map/Map";
 import T "./Types";
 import G "./Guards";
 import OC "./OCTypes";
@@ -32,9 +34,12 @@ shared ({ caller }) actor class OCBot() = Self {
   let TEST_GROUP_ID = "evg6t-laaaa-aaaar-a4j5q-cai";
   let BOT_REGISTRATION_FEE: Nat = 10_000_000_000_000; // 10T
 
+  let { nhash } = Map;
+
   stable var custodians = List.make<Principal>(caller);
   stable var groups = List.nil<Principal>();
-  stable var status : T.BotStatus = #NotInitialized;
+  stable var activeProposals = Map.new<Nat, Nat>();
+  stable var botStatus : T.BotStatus = #NotInitialized;
   stable var botName : Text = "";
   stable var botDisplayName : ?Text = null;
   stable var lastMessageID : Nat = 0;
@@ -47,9 +52,9 @@ shared ({ caller }) actor class OCBot() = Self {
       return #err("Not authorized");
     };
 
-    switch(status){
+    switch(botStatus){
       case(#NotInitialized){
-        status := #Initializing;
+        botStatus := #Initializing;
 
         Cycles.add(BOT_REGISTRATION_FEE);
         let user_index : OC.UserIndexCanister = actor (USER_INDEX_CANISTER);
@@ -59,24 +64,24 @@ shared ({ caller }) actor class OCBot() = Self {
           switch (res){
             case (#Success or #AlreadyRegistered){
 
-              status := #Initialized;
+              botStatus := #Initialized;
               botName := name;
               botDisplayName := displayName;
               return #ok("Initialized");
             };
             case (#InsufficientCyclesProvided(n)) {
-              status := #NotInitialized;
+              botStatus := #NotInitialized;
               return #err("Not enough cycles. Required: " # Nat.toText(n));
             };
             case(_){
-              status := #NotInitialized;
+              botStatus := #NotInitialized;
               return #err("Error")
             };
           };
-          status := #Initialized;
+          botStatus := #Initialized;
           return #ok("Initialized")
           } catch(e){
-            status := #NotInitialized;
+            botStatus := #NotInitialized;
             return #err("Trapped")
           }
       };
@@ -226,12 +231,23 @@ shared ({ caller }) actor class OCBot() = Self {
       };
   };
 
-  let messageRange : Nat32 = 10;
-  //retrieve last maxRetries * messageRange messages, TODO: optimize
-  public shared({caller}) func findMessageIndexByProposalId(proposalId : Nat) : async Result.Result<OC.MessageIndex, Text> {
-    if (not G.isCustodian(caller, custodians)) {
-      return #err("Not authorized");
+  func formatMessage(tally : T.TallyData) : Text {
+    var res = "Status: " # "\n";
+    res := res # "Proposal ID: " # Nat.toText(tally.proposalId) # "\n";
+    res := res # "Proposal Topic: " # Nat.toText(tally.topic) # "\n";
+
+    for(vote in tally.votes.vals()){
+      res := res # "Neuron ID: " # Principal.toText(vote.principal) # "\n";
+      res := res # "Display Name: " # Option.get(vote.displayName, "") # "\n";
     };
+
+    res
+  };
+
+  let messageRange : Nat32 = 10;
+  // Attempt to send messages for new proposals and register the corresponding message ID in the associative map.
+  // To keep payload size at a minimum it retrieves 10 messages at a time for a max of maxRetries.
+  func trySendMessages(tallies : [T.TallyData]) : async Result.Result<Text, Text> {
 
     var index = await getLatestMessageIndex(NNS_PROPOSAL_GROUP_ID);
     var resolvedIndex = switch(index){
@@ -239,32 +255,59 @@ shared ({ caller }) actor class OCBot() = Self {
       case(_){return #err("Error")};
     };
 
+    var _tallies = tallies;
 
+    //TODO: compromise IC calls with increased payload size?
     var maxRetries = 3;
     while (maxRetries > 0){
       maxRetries := maxRetries - 1;
 
+      //generate ranges for message indexes to fetch
       let indexVec = Iter.range(Nat32.toNat(resolvedIndex) - Nat32.toNat(messageRange) , Nat32.toNat(resolvedIndex) ) |> 
-        Iter.map(_, func (n : Nat) : Nat32 {Nat32.fromNat(n)}) |> 
-          Iter.toArray(_);
+                        Iter.map(_, func (n : Nat) : Nat32 {Nat32.fromNat(n)}) |> 
+                          Iter.toArray(_);
     
 
       let res = await* getGroupMessagesByIndex(NNS_PROPOSAL_GROUP_ID, indexVec, null);
       switch(res){
         case(#ok(val)){
           for (message in val.messages.vals()){ 
-              let proposalData = getNNSProposalMessageData(message);
-              switch(proposalData){
-                case(#ok(data)){
-                  if(Nat64.toNat(data.proposalId) == proposalId){
-                    return #ok(data.messageIndex);
-                  }
-                };
-                case(#err(_)){
-                  //This should never happen
-                }
+            let proposalData = getNNSProposalMessageData(message);
+            switch(proposalData){
+              case(#ok(data)){
+                //TODO: use map?
+                  let tally = Array.find<T.TallyData>(_tallies, func (t : T.TallyData) : Bool {
+                    return Nat64.toNat(data.proposalId) == t.proposalId;
+                  });
+                  
+                  switch(tally){
+                    case(?t){
+                      //send message
+                      let msg = await* sendTextMessageToGroup(NNS_PROPOSAL_GROUP_ID, formatMessage(t), ?data.messageIndex);
+                      switch (msg){
+                        case(#Success(msgData)){
+                          //TODO: fix edge case where a proposal is settled on the first send
+                          // store in map
+                          Map.set(activeProposals, nhash, Nat64.toNat(data.proposalId), Nat32.toNat(msgData.message_index));
+
+                          //remove from tallies
+                          _tallies := Array.filter(_tallies, func(n : T.TallyData) : Bool {
+                            return n.proposalId != t.proposalId;
+                          });
+                        };
+                        case(_){
+                          //TODO: log error
+                        }
+                      };
+                    }; 
+                    case(_){};
+                  };
+              };
+              case(#err(_)){
+                //This should never happen, TODO: log 
               }
-          }  
+            };
+          } 
         };
         //Error retrieving messages
         case(_){
@@ -272,24 +315,53 @@ shared ({ caller }) actor class OCBot() = Self {
         }
       };
       resolvedIndex := resolvedIndex - messageRange;
-
-      // switch(res){
-      //   case(#ok(val)){
-      //         return #ok(val)
-      //       };
-      //   case(_){
-      //     return #err("Error retrieving messages")
-      //   } 
-      // }
+      //return early if all tallies are matched
+      if ((Array.size(_tallies) == 0)){
+        return #ok("Tallies updated");
+      };
     };
+
+    //TODO: log unmatched proposal ids
      return #err("Max retries reached");
   };
 
-  // public shared({caller}) func updateTallies(tallies : [OC.Tally]) : async Result.Result<Text, Text>{
-  //   if (not G.isCustodian(caller, custodians)) {
-  //     return #err("Not authorized");
-  //   };
-  // };
+  public shared({caller}) func updateTallies(tallies : [T.TallyData]) : async Result.Result<Text, Text>{
+    if (not G.isCustodian(caller, custodians)) {
+      return #err("Not authorized");
+    };
+
+    let newProposals = List.nil<Nat>();
+    var _tallies = tallies;
+    for (tally in tallies.vals()){
+      let p = Map.get(activeProposals, nhash, tally.proposalId);
+      switch(p){ 
+        case(?p){
+            // edit message
+            let res = await* editTextGroupMessage(NNS_PROPOSAL_GROUP_ID, p, formatMessage(tally));
+
+            // if proposal is over, remove from map
+            switch (tally.tallyStatus, tally.proposalStatus){
+              case((#Approved or #Rejected), #Executed){
+                Map.delete(activeProposals, nhash, tally.proposalId);
+              };
+              case(_){};
+            };
+
+            // Remove updated tallies
+            _tallies := Array.filter(_tallies, func(n : T.TallyData) : Bool {
+              return n.proposalId != tally.proposalId;
+            });
+        };
+        case(_){};
+      };
+    };
+
+    //at least one proposal is new
+    if (not (Array.size(_tallies) > 0)){
+      return await trySendMessages(tallies);
+    };
+    return #ok("Tallies updated");
+  };
 
   //TEST ENDPOINTS
 
