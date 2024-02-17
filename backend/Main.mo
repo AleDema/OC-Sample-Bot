@@ -329,33 +329,31 @@ shared ({ caller }) actor class OCBot() = Self {
 
     let newProposals = List.nil<Nat>();
     var _tallies = tallies;
-    for (tally in tallies.vals()){
-      let p = Map.get(activeProposals, nhash, tally.proposalId);
-      switch(p){ 
-        case(?p){
-            // edit message
-            let res = await* editTextGroupMessage(NNS_PROPOSAL_GROUP_ID, p, formatMessage(tally));
+    label it for (tally in tallies.vals()){
+      let p = switch(Map.get(activeProposals, nhash, tally.proposalId)){
+        case(?p){p};
+        case(_){ continue it; };
+      };
+      // edit message
+      let res = await* editTextGroupMessage(NNS_PROPOSAL_GROUP_ID, p, formatMessage(tally));
 
-            // if proposal is over, remove from map
-            switch (tally.tallyStatus, tally.proposalStatus){
-              case((#Approved or #Rejected), #Executed){
-                Map.delete(activeProposals, nhash, tally.proposalId);
-              };
-              case(_){};
-            };
-
-            // Remove updated tallies
-            _tallies := Array.filter(_tallies, func(n : T.TallyData) : Bool {
-              return n.proposalId != tally.proposalId;
-            });
+      // if proposal is over, remove from map
+      switch (tally.tallyStatus, tally.proposalStatus){
+        case((#Approved or #Rejected), #Executed){
+          Map.delete(activeProposals, nhash, tally.proposalId);
         };
         case(_){};
       };
+
+      // Remove updated tallies
+      _tallies := Array.filter(_tallies, func(n : T.TallyData) : Bool {
+        return n.proposalId != tally.proposalId;
+      });
     };
 
     //at least one proposal is new
     if (not (Array.size(_tallies) > 0)){
-      return await trySendMessages(tallies);
+      return await trySendMessages(_tallies);
     };
     return #ok("Tallies updated");
   };
