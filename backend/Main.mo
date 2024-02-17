@@ -15,6 +15,7 @@ import Int "mo:base/Int";
 import Array "mo:base/Array";
 import Map "mo:map/Map";
 import T "./Types";
+import TU "./TextUtils";
 import G "./Guards";
 import OC "./OCTypes";
 import MT "./MetricTypes";
@@ -231,71 +232,6 @@ shared ({ caller }) actor class OCBot() = Self {
       };
   };
 
-
-  func voteToText(vote : T.Vote) : Text {
-    switch(vote){
-      case(#Abstained){
-        return "Abstained";
-        };
-        case(#Approved){
-          return "Accepted";
-        };
-        case(#Rejected){
-          return "Rejected";
-        };
-        case(#Pending){
-          return "Pending";
-        };
-    };
-  };
-
-  func proposalStatusToText(status : T.ProposalStatus) : Text {
-    switch(status){
-      case(#Pending){
-        return "Pending"; 
-      };
-      case(#Executed(verdict)){
-        switch(verdict){
-          case(#Approved){
-            return "Approved";
-          };
-          case(#Rejected){
-            return "Rejected";
-          };
-        };
-      };
-    };
-  };
-
-  func formatMessage(tally : T.TallyData) : Text {
-    var approves = 0;
-    var rejects = 0;
-    let total = Nat.toText(Array.size(tally.votes));
-
-    var res = "Status: " # "\n";
-    res := res # "Proposal ID: " # Nat.toText(tally.proposalId) # "\n";
-    res := res # "Proposal Topic: " # Nat.toText(tally.proposalTopic) # "\n";
-    res := res # "Proposal Status: " # proposalStatusToText(tally.proposalStatus) # "\n";
-    res := res # "Tally Status: " # voteToText(tally.tallyStatus) # "Approves: " # "Rejects: " # "Total: " # total #  "\n";
-
-    var tmp : Text = "";
-    for(voteRecord in tally.votes.vals()){
-      switch(voteRecord.vote){
-        case(#Approved){
-          approves := approves + 1;
-        };
-        case(#Rejected){
-          rejects := rejects + 1;
-        };
-        case(_){};
-      };
-      tmp := tmp # "Neuron ID: " # Principal.toText(voteRecord.principal) # "Display Name: " # Option.get(voteRecord.displayName, "()") # "Vote: " # voteToText(voteRecord.vote) # "\n";
-    };
-
-    res := res # tmp;
-    res
-  };
-
   let messageRange : Nat32 = 10;
   // Attempt to send messages for new proposals and register the corresponding message ID in the associative map.
   // To keep payload size at a minimum it retrieves 10 messages at a time for a max of maxRetries.
@@ -344,7 +280,7 @@ shared ({ caller }) actor class OCBot() = Self {
         };
 
         //send message
-        let msg = await* sendTextMessageToGroup(NNS_PROPOSAL_GROUP_ID, formatMessage(tally), ?proposalData.messageIndex);
+        let msg = await* sendTextMessageToGroup(NNS_PROPOSAL_GROUP_ID, TU.formatMessage(tally), ?proposalData.messageIndex);
 
         switch (msg){
           case(#Success(msgData)){
@@ -389,7 +325,7 @@ shared ({ caller }) actor class OCBot() = Self {
         case(_){ continue it; };
       };
       // edit message
-      let res = await* editTextGroupMessage(NNS_PROPOSAL_GROUP_ID, p, formatMessage(tally));
+      let res = await* editTextGroupMessage(NNS_PROPOSAL_GROUP_ID, p, TU.formatMessage(tally));
 
       // if proposal is over, remove from map
       switch (tally.tallyStatus, tally.proposalStatus){
