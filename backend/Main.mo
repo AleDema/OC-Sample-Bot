@@ -136,6 +136,7 @@ shared ({ caller }) actor class OCBot() = Self {
 
   func sendMessageToGroup(groupCanisterId : Principal, content : OC.MessageContentInitial, threadIndexId : ?Nat32) : async* OC.SendMessageResponse{
       let group_canister : OC.GroupIndexCanister = actor (Principal.toText(groupCanisterId));
+      lastMessageID := lastMessageID + 1;
       let res = await group_canister.send_message_v2({
         message_id = lastMessageID;
         thread_root_message_index = threadIndexId;
@@ -149,7 +150,6 @@ shared ({ caller }) actor class OCBot() = Self {
         message_filter_failed = null;
         correlation_id= 0;
       });
-      lastMessageID := lastMessageID + 1;
      res
   };
 
@@ -393,7 +393,7 @@ shared ({ caller }) actor class OCBot() = Self {
       return #err("Not authorized: " # Principal.toText(caller));
     };
 
-    let res = await* editTextGroupMessage(Principal.fromText(TEST_GROUP_ID), 3453453, newContent);
+    let res = await* editTextGroupMessage(Principal.fromText(TEST_GROUP_ID), messageId, newContent);
     #ok(res)
   };
 
