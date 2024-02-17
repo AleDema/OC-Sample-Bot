@@ -36,7 +36,7 @@ shared ({ caller }) actor class OCBot() = Self {
 
   stable var custodians = List.make<Principal>(caller);
   stable var groups = List.nil<Principal>();
-  stable var activeProposals = Map.new<OC.ProposalId, OC.MessageIndex>();
+  stable var activeProposals = Map.new<OC.ProposalId, OC.MessageId>();
   stable var botStatus : T.BotStatus = #NotInitialized;
   stable var botName : Text = "";
   stable var botDisplayName : ?Text = null;
@@ -134,9 +134,11 @@ shared ({ caller }) actor class OCBot() = Self {
     }
   };
 
-  func sendMessageToGroup(groupCanisterId : Principal, content : OC.MessageContentInitial, threadIndexId : ?Nat32) : async* OC.SendMessageResponse{
+
+  func sendMessageToGroup(groupCanisterId : Principal, content : OC.MessageContentInitial, threadIndexId : ?Nat32) : async* T.SendMessageResponse{
       let group_canister : OC.GroupIndexCanister = actor (Principal.toText(groupCanisterId));
       lastMessageID := lastMessageID + 1;
+      let msgIdCls = lastMessageID;
       let res = await group_canister.send_message_v2({
         message_id = lastMessageID;
         thread_root_message_index = threadIndexId;
@@ -150,10 +152,54 @@ shared ({ caller }) actor class OCBot() = Self {
         message_filter_failed = null;
         correlation_id= 0;
       });
-     res
+      switch(res){
+        case(#Success(response)){
+          #Success({ response with message_id = msgIdCls;})
+        };
+        case(#ChannelNotFound){
+          #ChannelNotFound
+        };
+        case(#ThreadMessageNotFound){
+          #ThreadMessageNotFound
+        };
+        case(#MessageEmpty){
+          #MessageEmpty
+        };
+        case(#TextTooLong(n)){
+          #TextTooLong(n)
+        };
+        case(#InvalidPoll(reason)){
+          #InvalidPoll(reason) 
+        };
+        case(#NotAuthorized){
+          #NotAuthorized
+        };
+        case(#UserNotInCommunity){
+          #UserNotInCommunity
+        };
+        case(#UserNotInChannel){
+          #UserNotInChannel
+        };
+        case(#UserSuspended){
+          #UserSuspended
+        };
+        case(#InvalidRequest(reason)){
+          #InvalidRequest(reason)
+        };
+        case(#CommunityFrozen){
+          #CommunityFrozen
+        };
+        case(#RulesNotAccepted){
+          #RulesNotAccepted
+        };
+        case(#CommunityRulesNotAccepted){
+          #CommunityRulesNotAccepted
+        };
+
+      };
   };
 
-  func sendTextMessageToGroup(groupCanisterId : Principal, content : Text, threadIndexId : ?Nat32) : async* OC.SendMessageResponse{
+  func sendTextMessageToGroup(groupCanisterId : Principal, content : Text, threadIndexId : ?Nat32) : async* T.SendMessageResponse{
     await* sendMessageToGroup(groupCanisterId, #Text({text = content}), threadIndexId);
   };
 
@@ -278,9 +324,9 @@ shared ({ caller }) actor class OCBot() = Self {
           };
         };
 
-        let msg = await* sendTextMessageToGroup(NNS_PROPOSAL_GROUP_ID, TU.formatMessage(tally), ?proposalData.messageIndex);
+        let res = await* sendTextMessageToGroup(NNS_PROPOSAL_GROUP_ID, TU.formatMessage(tally), ?proposalData.messageIndex);
 
-        switch (msg){
+        switch (res){
           case(#Success(msgData)){
             //remove from tallies
             _tallies := Array.filter(_tallies, func(n : T.TallyData) : Bool {
@@ -290,7 +336,7 @@ shared ({ caller }) actor class OCBot() = Self {
             //handle edge case where a proposal is settled on the first send, it won;t be updated so there is no need to add to the map
             switch(tally.proposalStatus){
               case(#Pending){
-                Map.set(activeProposals, n64hash, proposalData.proposalId, msgData.message_index);
+                Map.set(activeProposals, n64hash, proposalData.proposalId, msgData.message_id);
               };
               case(_){};
             }
@@ -329,7 +375,7 @@ shared ({ caller }) actor class OCBot() = Self {
         case(_){ continue it; };
       };
       // edit message
-      let res = await* editTextGroupMessage(NNS_PROPOSAL_GROUP_ID, Nat32.toNat(p), TU.formatMessage(tally));
+      let res = await* editTextGroupMessage(NNS_PROPOSAL_GROUP_ID, p, TU.formatMessage(tally));
 
       // if proposal is over, remove from map
       switch (tally.tallyStatus, tally.proposalStatus){
@@ -370,7 +416,7 @@ shared ({ caller }) actor class OCBot() = Self {
     await joinGroup(groupCanisterId, null);
   };
 
-  public shared({caller}) func testSendMessage(content : Text) : async Result.Result<OC.SendMessageResponse, Text>{
+  public shared({caller}) func testSendMessage(content : Text) : async Result.Result<T.SendMessageResponse, Text>{
     if (not G.isCustodian(caller, custodians)) {
       return #err("Not authorized: " # Principal.toText(caller));
     };
@@ -379,7 +425,7 @@ shared ({ caller }) actor class OCBot() = Self {
     #ok(res)
   };
 
-  public shared({caller}) func testSendMessageThread(content : Text, threadIndexId : Nat32) : async Result.Result<OC.SendMessageResponse, Text>{
+  public shared({caller}) func testSendMessageThread(content : Text, threadIndexId : Nat32) : async Result.Result<T.SendMessageResponse, Text>{
     if (not G.isCustodian(caller, custodians)) {
       return #err("Not authorized: " # Principal.toText(caller));
     };

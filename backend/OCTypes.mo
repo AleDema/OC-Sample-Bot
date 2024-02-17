@@ -1448,7 +1448,7 @@ module {
       #ThreadMessageNotFound;
       #MessageEmpty;
       #TextTooLong : Nat32;
-      //#InvalidPoll : InvalidPollReason;
+      #InvalidPoll : InvalidPollReason;
       #NotAuthorized;
       #UserNotInCommunity;
       #UserNotInChannel;
