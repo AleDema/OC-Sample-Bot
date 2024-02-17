@@ -46,11 +46,10 @@ module {
     var rejects = 0;
     let total = Nat.toText(Array.size(tally.votes));
 
-    var res = "Status: " # "\n";
-    res := res # "Proposal ID: " # Nat64.toText(tally.proposalId) # "\n";
-    res := res # "Proposal Topic: " # Nat.toText(tally.proposalTopic) # "\n";
-    res := res # "Proposal Status: " # proposalStatusToText(tally.proposalStatus) # "\n";
-    res := res # "Tally Status: " # voteToText(tally.tallyStatus) # "Approves: " # "Rejects: " # "Total: " # total #  "\n";
+    // var res = "Status: " # "\n";
+    // res := res # "Proposal ID: " # Nat64.toText(tally.proposalId) # "\n";
+    // res := res # "Proposal Status: " # proposalStatusToText(tally.proposalStatus) # "\n";
+    var res =  "Tally Status: " # voteToText(tally.tallyStatus) # "\n Approves: " # "Rejects: " # "Total: " # total #  "\n";
 
     var tmp : Text = "";
     for(voteRecord in tally.votes.vals()){
@@ -63,7 +62,7 @@ module {
         };
         case(_){};
       };
-      tmp := tmp # "Neuron ID: " # Nat64.toText(voteRecord.neuronId) # "Display Name: " # Option.get(voteRecord.displayName, "()") # "Vote: " # voteToText(voteRecord.vote) # "\n";
+      tmp := tmp # "Neuron ID: " # Nat64.toText(voteRecord.neuronId) # " | Alias: " # Option.get(voteRecord.displayName, "()") # " | Vote: " # voteToText(voteRecord.vote) # "\n";
     };
 
     res := res # tmp;
