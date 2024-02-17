@@ -249,8 +249,7 @@ shared ({ caller }) actor class OCBot() = Self {
   // To keep payload size at a minimum it retrieves 10 messages at a time for a max of maxRetries.
   func trySendMessages( tallies : [ T.TallyData]) : async Result.Result<Text, Text> {
 
-    var index = await getLatestMessageIndex(NNS_PROPOSAL_GROUP_ID);
-    var resolvedIndex = switch(index){
+    var index = switch(await getLatestMessageIndex(NNS_PROPOSAL_GROUP_ID)){
       case(?index){index};
       case(_){return #err("Error")};
     };
@@ -263,7 +262,7 @@ shared ({ caller }) actor class OCBot() = Self {
       maxRetries := maxRetries - 1;
 
       //generate ranges for message indexes to fetch
-      let indexVec = Iter.range(Nat32.toNat(resolvedIndex) - Nat32.toNat(messageRange) , Nat32.toNat(resolvedIndex) ) |> 
+      let indexVec = Iter.range(Nat32.toNat(index) - Nat32.toNat(messageRange) , Nat32.toNat(index)) |> 
                         Iter.map(_, func (n : Nat) : Nat32 {Nat32.fromNat(n)}) |> 
                           Iter.toArray(_);
     
@@ -289,7 +288,7 @@ shared ({ caller }) actor class OCBot() = Self {
           case(?t){t};
           case(_){
             continue messages;
-            };
+          };
         };
 
         //send message
@@ -316,7 +315,7 @@ shared ({ caller }) actor class OCBot() = Self {
         };
       };
 
-      resolvedIndex := resolvedIndex - messageRange;
+      index := index - messageRange;
       //return early if all tallies are matched
       if ((Array.size(_tallies) == 0)){
         return #ok("Tallies updated");
@@ -332,7 +331,6 @@ shared ({ caller }) actor class OCBot() = Self {
       return #err("Not authorized");
     };
 
-    let newProposals = List.nil<Nat>();
     var _tallies = tallies;
     label it for (tally in tallies.vals()){
       let p = switch(Map.get(activeProposals, nhash, tally.proposalId)){
