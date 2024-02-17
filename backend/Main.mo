@@ -425,14 +425,12 @@ shared ({ caller }) actor class OCBot() = Self {
     if (not G.isCustodian(caller, custodians)) {
       return #err("Not authorized: " # Principal.toText(caller));
     };
-
-    var index = await getLatestMessageIndex(NNS_PROPOSAL_GROUP_ID);
-    var resolvedIndex = switch(index){
+    var index = switch(await getLatestMessageIndex(NNS_PROPOSAL_GROUP_ID)){
       case(?index){index};
       case(_){return #err("Error")};
     };
 
-    return #ok(resolvedIndex)
+    return #ok(index)
   };
 
   // ADMIN //
