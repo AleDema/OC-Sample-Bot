@@ -12,16 +12,15 @@ module{
     #Err : E;
   };
 
-    type ProposalStatus = {
-    #Executed;
-    #Approved;
-    #Rejected;
+  public type ProposalStatus = {
+    #Executed : {#Approved; #Rejected;};
     #Pending;
   };
 
-  type Vote = {
+  public type Vote = {
     #Approved;
     #Rejected;
+    #Abstained;
     #Pending;
   };
 
@@ -35,7 +34,7 @@ module{
     votes : [VoteRecords];
     proposalId : Nat;
     proposalStatus : ProposalStatus;
-    topic : Nat;
+    proposalTopic : Nat;
     tallyStatus : Vote;
     timestamp : Nat;
   };
