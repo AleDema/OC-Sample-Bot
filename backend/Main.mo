@@ -247,7 +247,7 @@ shared ({ caller }) actor class OCBot() = Self {
   let messageRange : Nat32 = 10;
   // Attempt to send messages for new proposals and register the corresponding message ID in the associative map.
   // To keep payload size at a minimum it retrieves 10 messages at a time for a max of maxRetries.
-  func trySendMessages(tallies : [T.TallyData]) : async Result.Result<Text, Text> {
+  func trySendMessages( tallies : [ T.TallyData]) : async Result.Result<Text, Text> {
 
     var index = await getLatestMessageIndex(NNS_PROPOSAL_GROUP_ID);
     var resolvedIndex = switch(index){
@@ -259,7 +259,7 @@ shared ({ caller }) actor class OCBot() = Self {
 
     //TODO: compromise IC calls with increased payload size?
     var maxRetries = 3;
-    while (maxRetries > 0){
+    label attempts while (maxRetries > 0){
       maxRetries := maxRetries - 1;
 
       //generate ranges for message indexes to fetch
@@ -268,52 +268,49 @@ shared ({ caller }) actor class OCBot() = Self {
                           Iter.toArray(_);
     
 
-      let res = await* getGroupMessagesByIndex(NNS_PROPOSAL_GROUP_ID, indexVec, null);
-      switch(res){
-        case(#ok(val)){
-          for (message in val.messages.vals()){ 
-            let proposalData = getNNSProposalMessageData(message);
-            switch(proposalData){
-              case(#ok(data)){
-                //TODO: use map?
-                  let tally = Array.find<T.TallyData>(_tallies, func (t : T.TallyData) : Bool {
-                    return Nat64.toNat(data.proposalId) == t.proposalId;
-                  });
-                  
-                  switch(tally){
-                    case(?t){
-                      //send message
-                      let msg = await* sendTextMessageToGroup(NNS_PROPOSAL_GROUP_ID, formatMessage(t), ?data.messageIndex);
-                      switch (msg){
-                        case(#Success(msgData)){
-                          //TODO: fix edge case where a proposal is settled on the first send
-                          // store in map
-                          Map.set(activeProposals, nhash, Nat64.toNat(data.proposalId), Nat32.toNat(msgData.message_index));
-
-                          //remove from tallies
-                          _tallies := Array.filter(_tallies, func(n : T.TallyData) : Bool {
-                            return n.proposalId != t.proposalId;
-                          });
-                        };
-                        case(_){
-                          //TODO: log error
-                        }
-                      };
-                    }; 
-                    case(_){};
-                  };
-              };
-              case(#err(_)){
-                //This should never happen, TODO: log 
-              }
-            };
-          } 
-        };
+      let #ok(res) = await* getGroupMessagesByIndex(NNS_PROPOSAL_GROUP_ID, indexVec, null)
+      else {
         //Error retrieving messages
-        case(_){
-
-        }
+        continue attempts;
       };
+
+      label messages for (message in res.messages.vals()){ 
+        let #ok(proposalData) = getNNSProposalMessageData(message)
+        else {
+           //This shouldn't happen, TODO: log
+           continue messages;
+        };
+        let exists = Array.find<T.TallyData>(_tallies, func (t : T.TallyData) : Bool {
+          return Nat64.toNat(proposalData.proposalId) == t.proposalId;
+        });
+
+
+        let tally = switch(exists){
+          case(?t){t};
+          case(_){
+            continue messages;
+            };
+        };
+
+          //send message
+        let msg = await* sendTextMessageToGroup(NNS_PROPOSAL_GROUP_ID, formatMessage(tally), ?proposalData.messageIndex);
+        switch (msg){
+          case(#Success(msgData)){
+            //TODO: fix edge case where a proposal is settled on the first send
+            // store in map
+            Map.set(activeProposals, nhash, Nat64.toNat(proposalData.proposalId), Nat32.toNat(msgData.message_index));
+
+            //remove from tallies
+            _tallies := Array.filter(_tallies, func(n : T.TallyData) : Bool {
+              return n.proposalId != tally.proposalId;
+            });
+          };
+          case(_){
+            //TODO: log error
+          }
+        };
+      };
+
       resolvedIndex := resolvedIndex - messageRange;
       //return early if all tallies are matched
       if ((Array.size(_tallies) == 0)){
