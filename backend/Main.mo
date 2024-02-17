@@ -292,18 +292,23 @@ shared ({ caller }) actor class OCBot() = Self {
             };
         };
 
-          //send message
+        //send message
         let msg = await* sendTextMessageToGroup(NNS_PROPOSAL_GROUP_ID, formatMessage(tally), ?proposalData.messageIndex);
+
         switch (msg){
           case(#Success(msgData)){
-            //TODO: fix edge case where a proposal is settled on the first send
-            // store in map
-            Map.set(activeProposals, nhash, Nat64.toNat(proposalData.proposalId), Nat32.toNat(msgData.message_index));
-
             //remove from tallies
             _tallies := Array.filter(_tallies, func(n : T.TallyData) : Bool {
               return n.proposalId != tally.proposalId;
             });
+
+            //handle edge case where a proposal is settled on the first send, it won;t be updated so there is no need to add to the map
+            switch(tally.proposalStatus){
+              case(#Pending){
+                Map.set(activeProposals, nhash, Nat64.toNat(proposalData.proposalId), Nat32.toNat(msgData.message_index));
+              };
+              case(_){};
+            }
           };
           case(_){
             //TODO: log error
