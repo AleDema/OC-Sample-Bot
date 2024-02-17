@@ -1,6 +1,7 @@
 import OC "./OCTypes";
 module{
 
+  public type TextPrincipal = Text;
   public type BotStatus = {
     #NotInitialized;
     #Initializing;
@@ -24,17 +25,18 @@ module{
     #Pending;
   };
 
-  type VoteRecords = {
+  public type VoteRecord = {
     neuronId : OC.NnsNeuronId;
     displayName : ?Text;
     vote : Vote;
   };
 
  public type TallyData = {
-    votes : [VoteRecords];
+    name : ?Text;
+    votes : [VoteRecord];
     proposalId : OC.ProposalId;
     proposalStatus : ProposalStatus;
-    proposalTopic : Nat;
+    //proposalTopic : Nat;
     tallyStatus : Vote;
     timestamp : Nat;
   };
