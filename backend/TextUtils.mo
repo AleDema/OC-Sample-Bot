@@ -3,6 +3,7 @@ import Nat "mo:base/Nat";
 import Array "mo:base/Array";
 import Principal "mo:base/Principal";
 import Option "mo:base/Option";
+import Nat64 "mo:base/Nat64";
 
 module {
   public func voteToText(vote : T.Vote) : Text {
@@ -46,7 +47,7 @@ module {
     let total = Nat.toText(Array.size(tally.votes));
 
     var res = "Status: " # "\n";
-    res := res # "Proposal ID: " # Nat.toText(tally.proposalId) # "\n";
+    res := res # "Proposal ID: " # Nat64.toText(tally.proposalId) # "\n";
     res := res # "Proposal Topic: " # Nat.toText(tally.proposalTopic) # "\n";
     res := res # "Proposal Status: " # proposalStatusToText(tally.proposalStatus) # "\n";
     res := res # "Tally Status: " # voteToText(tally.tallyStatus) # "Approves: " # "Rejects: " # "Total: " # total #  "\n";

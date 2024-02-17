@@ -22,11 +22,8 @@ import MT "./MetricTypes";
 
 shared ({ caller }) actor class OCBot() = Self {
 
-  //TODO: find proposal id
-  // receive ds
-  // store in progress proposals and their message id
+  //TODOs:
   // set avatar
-  // send message and save messageIDs for edits
 
   let USER_INDEX_CANISTER = "4bkt6-4aaaa-aaaaf-aaaiq-cai";
   let LOCAL_USER_INDEX_ID = "nq4qv-wqaaa-aaaaf-bhdgq-cai";
@@ -35,11 +32,11 @@ shared ({ caller }) actor class OCBot() = Self {
   let TEST_GROUP_ID = "evg6t-laaaa-aaaar-a4j5q-cai";
   let BOT_REGISTRATION_FEE: Nat = 10_000_000_000_000; // 10T
 
-  let { nhash } = Map;
+  let { nhash; n64hash; n32hash } = Map;
 
   stable var custodians = List.make<Principal>(caller);
   stable var groups = List.nil<Principal>();
-  stable var activeProposals = Map.new<Nat, Nat>();
+  stable var activeProposals = Map.new<OC.ProposalId, OC.MessageIndex>();
   stable var botStatus : T.BotStatus = #NotInitialized;
   stable var botName : Text = "";
   stable var botDisplayName : ?Text = null;
@@ -159,7 +156,7 @@ shared ({ caller }) actor class OCBot() = Self {
     await* sendMessageToGroup(groupCanisterId, #Text({text = content}), threadIndexId);
   };
 
-  func editGroupMessage(groupCanisterId : Principal, messageId : Nat, newContent : OC.MessageContentInitial) : async* OC.EditMessageResponse{
+  func editGroupMessage(groupCanisterId : Principal, messageId : OC.MessageId, newContent : OC.MessageContentInitial) : async* OC.EditMessageResponse{
       let group_canister : OC.GroupIndexCanister = actor (Principal.toText(groupCanisterId));
       let res = await group_canister.edit_message_v2({
         message_id = messageId;
@@ -171,7 +168,7 @@ shared ({ caller }) actor class OCBot() = Self {
      res
   };
 
-  func editTextGroupMessage(groupCanisterId : Principal, messageId : Nat, newContent : Text) : async* OC.EditMessageResponse{
+  func editTextGroupMessage(groupCanisterId : Principal, messageId : OC.MessageId, newContent : Text) : async* OC.EditMessageResponse{
     await* editGroupMessage(groupCanisterId, messageId, #Text({text = newContent}));
   };
 
@@ -193,7 +190,7 @@ shared ({ caller }) actor class OCBot() = Self {
     }
   };
 
-  func getNNSProposalMessageData(message : OC.MessageEventWrapper) : Result.Result<{proposalId : Nat64; messageIndex : OC.MessageIndex}, Text>{
+  func getNNSProposalMessageData(message : OC.MessageEventWrapper) : Result.Result<{proposalId : OC.ProposalId; messageIndex : OC.MessageIndex}, Text>{
       let event = message.event;
       switch(event.content){
         case(#GovernanceProposal(p)){
@@ -268,7 +265,7 @@ shared ({ caller }) actor class OCBot() = Self {
            continue messages;
         };
         let exists = Array.find<T.TallyData>(_tallies, func (t : T.TallyData) : Bool {
-          return Nat64.toNat(proposalData.proposalId) == t.proposalId;
+          return proposalData.proposalId == t.proposalId;
         });
 
 
@@ -292,7 +289,7 @@ shared ({ caller }) actor class OCBot() = Self {
             //handle edge case where a proposal is settled on the first send, it won;t be updated so there is no need to add to the map
             switch(tally.proposalStatus){
               case(#Pending){
-                Map.set(activeProposals, nhash, Nat64.toNat(proposalData.proposalId), Nat32.toNat(msgData.message_index));
+                Map.set(activeProposals, n64hash, proposalData.proposalId, msgData.message_index);
               };
               case(_){};
             }
@@ -320,17 +317,17 @@ shared ({ caller }) actor class OCBot() = Self {
 
     var _tallies = tallies;
     label it for (tally in tallies.vals()){
-      let p = switch(Map.get(activeProposals, nhash, tally.proposalId)){
+      let p = switch(Map.get(activeProposals, n64hash, tally.proposalId)){
         case(?p){p};
         case(_){ continue it; };
       };
       // edit message
-      let res = await* editTextGroupMessage(NNS_PROPOSAL_GROUP_ID, p, TU.formatMessage(tally));
+      let res = await* editTextGroupMessage(NNS_PROPOSAL_GROUP_ID, Nat32.toNat(p), TU.formatMessage(tally));
 
       // if proposal is over, remove from map
       switch (tally.tallyStatus, tally.proposalStatus){
         case((#Approved or #Rejected), #Executed(verdict)){
-          Map.delete(activeProposals, nhash, tally.proposalId);
+          Map.delete(activeProposals, n64hash, tally.proposalId);
         };
         case(_){};
       };

@@ -1,4 +1,4 @@
-import O "./OCTypes";
+import OC "./OCTypes";
 module{
 
   public type BotStatus = {
@@ -32,7 +32,7 @@ module{
 
  public type TallyData = {
     votes : [VoteRecords];
-    proposalId : Nat;
+    proposalId : OC.ProposalId;
     proposalStatus : ProposalStatus;
     proposalTopic : Nat;
     tallyStatus : Vote;

@@ -1461,7 +1461,7 @@ module {
 
   public type EditMessageV2Args = {
       thread_root_message_index : ?Nat32;
-      message_id : Nat;
+      message_id : MessageId;
       content : MessageContentInitial;
       correlation_id : Nat64;
   };
