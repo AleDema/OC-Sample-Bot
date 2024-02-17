@@ -45,6 +45,7 @@ shared ({ caller }) actor class OCBot() = Self {
   stable var latestMessageIndex = 0;
   stable var latestProposalID = 0;
 
+
   public shared({caller}) func initBot(name : Text, displayName : ?Text) : async Result.Result<Text, Text>{
     if (not G.isCustodian(caller, custodians)) {
       return #err("Not authorized");
@@ -241,7 +242,7 @@ shared ({ caller }) actor class OCBot() = Self {
 
     var _tallies = tallies;
 
-    //TODO: compromise IC calls with increased payload size?
+    //TODO: compromise cross canister calls with increased payload size?
     var maxRetries = 3;
     label attempts while (maxRetries > 0){
       maxRetries := maxRetries - 1;
@@ -261,7 +262,8 @@ shared ({ caller }) actor class OCBot() = Self {
       label messages for (message in res.messages.vals()){ 
         let #ok(proposalData) = getNNSProposalMessageData(message)
         else {
-           //This shouldn't happen, TODO: log
+           //This shouldn't happen unless OC changes something, 
+           //TODO: log
            continue messages;
         };
         let exists = Array.find<T.TallyData>(_tallies, func (t : T.TallyData) : Bool {
@@ -276,7 +278,6 @@ shared ({ caller }) actor class OCBot() = Self {
           };
         };
 
-        //send message
         let msg = await* sendTextMessageToGroup(NNS_PROPOSAL_GROUP_ID, TU.formatMessage(tally), ?proposalData.messageIndex);
 
         switch (msg){
@@ -306,8 +307,14 @@ shared ({ caller }) actor class OCBot() = Self {
       };
     };
 
+
+    var notFound = "";
+    for(i in _tallies.vals()){
+      notFound := notFound # Nat64.toText(i.proposalId) # " ";
+    };
+
     //TODO: log unmatched proposal ids
-     return #err("Max retries reached");
+     return #err("Max retries reached: Proposals not found: " # notFound);
   };
 
   public shared({caller}) func updateTallies(tallies : [T.TallyData]) : async Result.Result<Text, Text>{
@@ -326,6 +333,7 @@ shared ({ caller }) actor class OCBot() = Self {
 
       // if proposal is over, remove from map
       switch (tally.tallyStatus, tally.proposalStatus){
+        //TODO: reconsider after polling canister design
         case((#Approved or #Rejected), #Executed(verdict)){
           Map.delete(activeProposals, n64hash, tally.proposalId);
         };
