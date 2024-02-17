@@ -393,7 +393,7 @@ shared ({ caller }) actor class OCBot() = Self {
     };
 
     //at least one proposal is new
-    if (not (Array.size(_tallies) > 0)){
+    if (Array.size(_tallies) > 0){
       return await* trySendMessages(_tallies);
     };
     return #ok("Tallies updated");
