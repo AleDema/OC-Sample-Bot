@@ -25,7 +25,7 @@ module{
   };
 
   type VoteRecords = {
-    principal : Principal;
+    neuronId : OC.NnsNeuronId;
     displayName : ?Text;
     vote : Vote;
   };

@@ -63,7 +63,7 @@ module {
         };
         case(_){};
       };
-      tmp := tmp # "Neuron ID: " # Principal.toText(voteRecord.principal) # "Display Name: " # Option.get(voteRecord.displayName, "()") # "Vote: " # voteToText(voteRecord.vote) # "\n";
+      tmp := tmp # "Neuron ID: " # Nat64.toText(voteRecord.neuronId) # "Display Name: " # Option.get(voteRecord.displayName, "()") # "Vote: " # voteToText(voteRecord.vote) # "\n";
     };
 
     res := res # tmp;
