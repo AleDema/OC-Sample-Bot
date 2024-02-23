@@ -27,7 +27,9 @@ When ready, run `dfx deploy --network ic` to deploy your application to the Inte
 ## 📚 Documentation
 
 - [Internet Computer docs](https://internetcomputer.org/docs/current/developer-docs/ic-overview)
+- [Best practices](https://internetcomputer.org/docs/current/developer-docs/smart-contracts/best-practices/general)
 - [`dfx.json` reference schema](https://internetcomputer.org/docs/current/references/dfx-json-reference/)
 - [Motoko developer docs](https://internetcomputer.org/docs/current/developer-docs/build/cdks/motoko-dfinity/motoko/)
 - [Mops usage instructions](https://j4mwm-bqaaa-aaaam-qajbq-cai.ic0.app/#/docs/install)
-
+- [OC design overview](https://github.com/open-chat-labs/open-chat/blob/master/architecture/doc.md)
+- [Rust bot reference](https://github.com/open-chat-labs/open-chat/tree/master/backend/bots)
