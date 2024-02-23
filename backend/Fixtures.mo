@@ -56,7 +56,6 @@ module{
     };
 
     //mixed batch with new and existing proposals
-    //mixed batch with wrong and correct proposals
     //proposal removal
     //abstained correctly registered
 
@@ -75,6 +74,7 @@ module{
         
     };
 
+    //mixed batch with wrong and correct proposals
     public func wrongMockData() : [T.TallyData] {
         
         let r1 = generateVoteRecord(222222, ?"Test", #Approved);
