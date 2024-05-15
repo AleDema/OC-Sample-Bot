@@ -13,6 +13,7 @@ import Iter "mo:base/Iter";
 import Option "mo:base/Option";
 import Int "mo:base/Int";
 import Array "mo:base/Array";
+import Timer "mo:base/Timer";
 import Map "mo:map/Map";
 import T "./Types";
 import TU "./TextUtils";
@@ -20,6 +21,7 @@ import G "./Guards";
 import OC "./OCTypes";
 import MT "./MetricTypes";
 import F "./Fixtures";
+import TT "./TrackerTypes";
 
 shared ({ caller }) actor class OCBot() = Self {
 
@@ -33,6 +35,7 @@ shared ({ caller }) actor class OCBot() = Self {
   let GROUP_INDEX_ID = "4ijyc-kiaaa-aaaaf-aaaja-cai";
   let NNS_PROPOSAL_GROUP_ID = "labxu-baaaa-aaaaf-anb4q-cai";
   let TEST_GROUP_ID = "evg6t-laaaa-aaaar-a4j5q-cai";
+  let GOVERNANCE_ID = "rrkah-fqaaa-aaaaa-aaaaq-cai";
   let BOT_REGISTRATION_FEE: Nat = 10_000_000_000_000; // 10T
 
   let { nhash; n64hash; n32hash } = Map;
@@ -40,6 +43,7 @@ shared ({ caller }) actor class OCBot() = Self {
   stable var custodians = List.make<Principal>(caller);
   stable var groups = List.nil<Principal>();
   stable var activeProposals = Map.new<OC.ProposalId, OC.MessageId>();
+  stable var activeProposals2 = Map.new<OC.ProposalId, Map.Map<T.TextPrincipal, OC.MessageId>>();
   stable var botStatus : T.BotStatus = #NotInitialized;
   stable var botName : Text = "";
   stable var botDisplayName : ?Text = null;
@@ -48,6 +52,98 @@ shared ({ caller }) actor class OCBot() = Self {
   stable var latestMessageIndex = 0;
   stable var latestProposalID = 0;
 
+  stable var lastProposalId : ?Nat = null;
+  stable var activeProposalMessages= Map.new<Nat, OC.MessageId>();
+  stable var timerId :?Nat = null;
+
+
+  public func initTimer<system>(_tickrate : ?Nat) : async Result.Result<(), Text> {
+            
+    let tickrate : Nat = Option.get(_tickrate, 5 * 60 * 1000);
+    switch(timerId){
+        case(?t){ return #err("Timer already created")};
+        case(_){};
+    };
+
+    timerId := ?Timer.recurringTimer<system>(#seconds(tickrate), func() : async () {
+            ignore await* updateGroup();
+    });
+
+    return #ok()
+  };
+
+  func topicIdToVariant(topic : Int32) : {#RVM; #SCM; #OTHER}{
+    switch(topic){
+      case(8){
+        return #SCM;
+      };
+      case(12){
+        return #RVM;
+      };
+      case(_){
+        return #OTHER;
+      }
+    }
+  };
+
+  stable var pendingSCMList = List.nil<TT.ProposalAPI>();
+  stable var lastSCMListUpdate  : ?Time.Time = null;
+  let MAX_SCM_WAIT_FOR_QUIET = 10 * 60 * 1000; // 10 minutes
+
+  func updateGroup() : async* () {
+    let tracker : TT.Tracker = actor ("vkqwa-eqaaa-aaaap-qhira-cai");
+    let res = await tracker.getProposals(GOVERNANCE_ID, null, [12]);
+    switch(res){
+      case(#ok(data)){
+          for(proposal in Array.vals(data)){
+            switch(topicIdToVariant(proposal.topicId)){
+              case(#RVM){
+                await* createProposalThread(TEST_GROUP_ID, NNS_PROPOSAL_GROUP_ID, proposal);
+              };
+              case(#SCM){
+                if(TU.isSeparateBuildProcess(proposal.title)){
+                  await* createProposalThread(TEST_GROUP_ID, NNS_PROPOSAL_GROUP_ID, proposal);  
+                } else {
+                    pendingSCMList := List.push(proposal, pendingSCMList);
+                    lastSCMListUpdate := ?Time.now();
+                };
+
+              };
+              case(_){};
+            };
+
+            if(proposal.id > Option.get(lastProposalId, 0)){
+              lastProposalId := ?proposal.id;
+            };
+        };
+      };
+      case(#err(e)){
+        switch(e){
+          case(#InvalidProposalId(d)){
+            lastProposalId := ?d.start;
+            await* updateGroup();
+          };
+          case(_){};
+        }
+      };
+    };
+
+    if(List.size(pendingSCMList) > 0 and Time.now() - MAX_SCM_WAIT_FOR_QUIET > Option.get(lastSCMListUpdate, Time.now())){
+
+    }
+  };
+
+  func createProposalThread(targetGroupId : Text, votingGroupId : Text, proposal : [TT.ProposalAPI]) : async* (){
+    let text = TU.formatProposals(proposal);
+    let res = await* sendTextMessageToGroup(targetGroupId, text, null);
+    switch(res){
+      case(#Success(d)){
+        let text2 = TU.formatProposalThreadMsg(votingGroupId, proposal.id, null);
+        let res = await* sendTextMessageToGroup(targetGroupId, text2, ?d.message_index);
+      };
+      case(_){};
+    }
+  };
 
   public shared({caller}) func initBot(name : Text, displayName : ?Text) : async Result.Result<Text, Text>{
     if (not G.isCustodian(caller, custodians)) {
@@ -154,6 +250,7 @@ shared ({ caller }) actor class OCBot() = Self {
         rules_accepted=  null;
         message_filter_failed = null;
         correlation_id= 0;
+        block_level_markdown = false;
       });
       switch(res){
         case(#Success(response)){
@@ -291,7 +388,7 @@ shared ({ caller }) actor class OCBot() = Self {
 
     var _tallies = tallies;
 
-    //TODO: compromise cross canister calls with increased payload size?
+    //TODO: consider compromising cross canister calls with increased payload size
     var maxRetries = 3;
     label attempts while (maxRetries > 0){
       maxRetries := maxRetries - 1;
@@ -422,6 +519,19 @@ shared ({ caller }) actor class OCBot() = Self {
     let mock = F.wrongMockData();
     return await updateTallies(mock);
   };
+
+  // public shared({caller}) func testGetNeuron(id : Nat64) : async GT.ListNeuronsResponse{
+  //   let gs = GS.GovernanceService(GOVERNANCE_ID);
+  //   return await* gs.listNeurons({
+  //               neuron_ids = [id];
+  //               include_neurons_readable_by_caller = false;
+  //           });
+  // };
+
+  // public shared({caller}) func testGetNeuronVote(id : Nat64, proposalId : OC.ProposalId) : async ({#Approved; #Rejected; #Unspecified}, Nat64, Nat64){
+  //   let gs = GS.GovernanceService(GOVERNANCE_ID);
+  //   return await* gs.getVoteStatus(id, proposalId);
+  // };
 
   public shared({caller}) func joinTestGroup() : async Result.Result<Text, Text>{
     if (not G.isCustodian(caller, custodians)) {

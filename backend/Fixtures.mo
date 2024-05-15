@@ -46,6 +46,7 @@ module{
 
         {
             name = name;
+            subscribers = [#NNSGROUP];
             proposalId = proposalId;
             proposalTopic = 12;
             proposalStatus = proposalStatus;

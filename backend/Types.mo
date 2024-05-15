@@ -1,4 +1,5 @@
 import OC "./OCTypes";
+import Principal "mo:base/Principal";
 module{
 
   public type TextPrincipal = Text;
@@ -31,11 +32,26 @@ module{
     vote : Vote;
   };
 
+  type Subscriber = {
+    #NNSGROUP;
+    #SNSGROUP : Principal;
+    #CustomGroup : Principal;
+    #DirectChat : Principal;
+  };
+
+
+  type ProposalType = {
+    #NNS;
+    #SNS : Principal;
+  };
+
  public type TallyData = {
     name : ?Text;
+    //subscribers : [Subscriber];
     votes : [VoteRecord];
     proposalId : OC.ProposalId;
     proposalStatus : ProposalStatus;
+    //proposalType : ProposalType;
     //proposalTopic : Nat;
     tallyStatus : Vote;
     timestamp : Nat;

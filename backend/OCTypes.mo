@@ -1437,6 +1437,7 @@ module {
       rules_accepted : ?Nat32;
       message_filter_failed : ?Nat64;
       correlation_id : Nat64;
+      block_level_markdown : Bool;
   };
 
   public type SendMessageResponse = {

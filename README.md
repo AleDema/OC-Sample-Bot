@@ -33,3 +33,9 @@ When ready, run `dfx deploy --network ic` to deploy your application to the Inte
 - [Mops usage instructions](https://j4mwm-bqaaa-aaaam-qajbq-cai.ic0.app/#/docs/install)
 - [OC design overview](https://github.com/open-chat-labs/open-chat/blob/master/architecture/doc.md)
 - [Rust bot reference](https://github.com/open-chat-labs/open-chat/tree/master/backend/bots)
+
+
+
+Separate proposal retrieval?
+pub sub or tick and fetch?
+how to mock ()
