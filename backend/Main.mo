@@ -22,6 +22,7 @@ import OC "./OCTypes";
 import MT "./MetricTypes";
 import F "./Fixtures";
 import TT "./TrackerTypes";
+import {MINUTE} "mo:time-consts";
 
 shared ({ caller }) actor class OCBot() = Self {
 
@@ -57,9 +58,10 @@ shared ({ caller }) actor class OCBot() = Self {
   stable var pendingSCMList = List.nil<TT.ProposalAPI>();
   stable var lastSCMListUpdate  : ?Time.Time = null;
   stable var latestNNSMessageIndex : ?Nat = null;
-  let MAX_SCM_WAIT_FOR_QUIET = 10 * 60 * 1000; // 10 minutes
+  let MAX_SCM_WAIT_FOR_QUIET : Nat = 10 * MINUTE; // 10 minutes
   type Testmap = Map.Map<Nat, (TT.ProposalAPI, Nat)>;
   stable let testmap : Testmap = Map.new<Nat, (TT.ProposalAPI, Nat)>();
+  stable var numberOfTicksSinceUpdate = 0;
 
   let BATCH_SIZE = 50;
 
@@ -80,17 +82,135 @@ shared ({ caller }) actor class OCBot() = Self {
 
   public func initTimer<system>(_tickrate : ?Nat) : async Result.Result<(), Text> {
             
-    let tickrate : Nat = Option.get(_tickrate, 5 * 60 * 1000);
+    let tickrate : Nat = Option.get(_tickrate, 5 * 60); // 5 minutes
     switch(timerId){
         case(?t){ return #err("Timer already created")};
         case(_){};
     };
 
     timerId := ?Timer.recurringTimer<system>(#seconds(tickrate), func() : async () {
-      await updateGroup(null);
+      await updateGroup(lastProposalId);
     });
 
     return #ok()
+  };
+
+  public func cancelTimer() : async Result.Result<(), Text> {
+    if (not G.isCustodian(caller, custodians)) {
+      return #err("Not authorized");
+    };
+    switch(timerId){
+      case(?t){
+        Timer.cancelTimer(t);
+        timerId := null;
+        return #ok();
+      };
+      case(_){
+        return #err("No Timer to delete");
+      }
+    }
+  };
+
+  public func testContains(text : Text) : async Bool {
+    return TU.isSeparateBuildProcess(text);
+  };
+
+  public func testSetLastProposalId(proposalId : Nat) : async () {
+    lastProposalId := ?proposalId;
+  };
+
+  stable var breakDebug = false;
+
+  public func testBreak() : async () {
+    breakDebug:= true;
+  };
+
+
+  func checkBreak() : Bool {
+    if (breakDebug){
+      breakDebug:= false;
+      return true
+    };
+    return false;
+  };
+
+  public func debugList() : async ([TT.ProposalAPI], Nat, Nat){
+    (List.toArray(pendingSCMList), numberOfTicksSinceUpdate, List.size(pendingSCMList))
+  };
+
+  public func clearPendingList() : async (){
+    pendingSCMList := List.nil<TT.ProposalAPI>();
+  };
+
+  let MESSAGE_SIZE_LIMIT = 10;
+  let MAX_TICKS_WITHOUT_UPDATE = 3;
+  public func updateGroup(start : ?Nat) : async () {
+    let tracker : TT.Tracker = actor ("vkqwa-eqaaa-aaaap-qhira-cai");
+
+    numberOfTicksSinceUpdate := numberOfTicksSinceUpdate + 1;
+    let res = await tracker.getProposals(GOVERNANCE_ID, start, [8]);
+    switch(res){
+      case(#ok(data)){
+          // for(proposal in Array.vals(data)){
+          //   Map.set(test, proposal.id, (proposal, 0));
+          // };
+
+          for(proposal in Array.vals(data)){
+            //TODO: remove, needed to stop when testing
+            if (checkBreak()){
+              return;
+            };
+
+            switch(topicIdToVariant(proposal.topicId)){
+              case(#RVM){
+                await* createProposalThread(TEST_GROUP_ID, NNS_PROPOSAL_GROUP_ID, proposal);
+              };
+              case(#SCM){
+                if(TU.isSeparateBuildProcess(proposal.title)){
+                  await* createProposalThread(TEST_GROUP_ID, NNS_PROPOSAL_GROUP_ID, proposal);  
+                } else {
+                    pendingSCMList := List.push(proposal, pendingSCMList);
+                    //lastSCMListUpdate := ?Time.now();
+                    numberOfTicksSinceUpdate := 0;
+                };
+
+              };
+              case(_){};
+            };
+
+            if(proposal.id > Option.get(lastProposalId, 0)){
+              lastProposalId := ?proposal.id;
+            };
+        };
+      };
+      case(#err(e)){
+        switch(e){
+          case(#InvalidProposalId(d)){
+            lastProposalId := ?d.start;
+            //await updateGroup();
+          };
+          case(_){};
+        }
+      };
+    };
+
+    //if((List.size(pendingSCMList) > 0 and List.size(pendingSCMList) < MESSAGE_SIZE_LIMIT and Time.now() - MAX_SCM_WAIT_FOR_QUIET > Option.get(lastSCMListUpdate, Time.now()))){
+    if((List.size(pendingSCMList) > 0 and List.size(pendingSCMList) < MESSAGE_SIZE_LIMIT and numberOfTicksSinceUpdate > MAX_TICKS_WITHOUT_UPDATE)){
+      let arr = List.toArray(pendingSCMList);
+      await* createBatchThread(TEST_GROUP_ID, NNS_PROPOSAL_GROUP_ID, arr);
+      pendingSCMList := List.nil<TT.ProposalAPI>();
+    } else if (List.size(pendingSCMList) > MESSAGE_SIZE_LIMIT){
+        let chunks = List.chunks(MESSAGE_SIZE_LIMIT, pendingSCMList);
+        for(chunk in List.toIter(chunks)){
+          if (List.size(chunk) < MESSAGE_SIZE_LIMIT){
+              pendingSCMList := chunk;
+              return;
+          } else {
+            await* createBatchThread(TEST_GROUP_ID, NNS_PROPOSAL_GROUP_ID, List.toArray(chunk));
+          }
+        };
+        pendingSCMList := List.nil<TT.ProposalAPI>();
+    }
   };
 
   // func matchProposalsWithMessages(groupId : Text, pendingList : Testmap) : async* Result.Result<(), Text>{
@@ -143,92 +263,6 @@ shared ({ caller }) actor class OCBot() = Self {
 
   //   #ok();
   // };
-
-  public func testContains(text : Text) : async Bool {
-    return TU.isSeparateBuildProcess(text);
-  };
-
-  public func testSetLastProposalId(proposalId : Nat) : async () {
-    lastProposalId := ?proposalId;
-  };
-
-  stable var breakDebug = false;
-
-  public func testBreak() : async () {
-    breakDebug:= true;
-  };
-
-
-  func checkBreak() : Bool {
-    if (breakDebug){
-      breakDebug:= false;
-      return true
-    };
-    return false;
-  };
-
-  public func updateGroup(_start : ?Nat) : async () {
-    let tracker : TT.Tracker = actor ("vkqwa-eqaaa-aaaap-qhira-cai");
-    var start = lastProposalId;
-    if (Option.isSome(_start)){
-      start := _start;
-    };
-
-    let res = await tracker.getProposals(GOVERNANCE_ID, start, [8]);
-    switch(res){
-      case(#ok(data)){
-          // for(proposal in Array.vals(data)){
-          //   Map.set(test, proposal.id, (proposal, 0));
-          // };
-
-          for(proposal in Array.vals(data)){
-            if (checkBreak()){
-              return;
-            };
-            switch(topicIdToVariant(proposal.topicId)){
-              case(#RVM){
-                await* createProposalThread(TEST_GROUP_ID, NNS_PROPOSAL_GROUP_ID, proposal);
-              };
-              case(#SCM){
-                if(TU.isSeparateBuildProcess(proposal.title)){
-                  await* createProposalThread(TEST_GROUP_ID, NNS_PROPOSAL_GROUP_ID, proposal);  
-                } else {
-                    pendingSCMList := List.push(proposal, pendingSCMList);
-                    lastSCMListUpdate := ?Time.now();
-                };
-
-              };
-              case(_){};
-            };
-
-            if(proposal.id > Option.get(lastProposalId, 0)){
-              lastProposalId := ?proposal.id;
-            };
-        };
-      };
-      case(#err(e)){
-        switch(e){
-          case(#InvalidProposalId(d)){
-            lastProposalId := ?d.start;
-            //await updateGroup();
-          };
-          case(_){};
-        }
-      };
-    };
-
-    if((List.size(pendingSCMList) > 0 and Time.now() - MAX_SCM_WAIT_FOR_QUIET > Option.get(lastSCMListUpdate, Time.now()))){
-      let arr = List.toArray(pendingSCMList);
-      await* createBatchThread(TEST_GROUP_ID, NNS_PROPOSAL_GROUP_ID, arr);
-      pendingSCMList := List.nil<TT.ProposalAPI>();
-    } else if (List.size(pendingSCMList) > 10){
-        let chunks = List.chunks(10, pendingSCMList);
-       for(chunk in List.toIter(chunks)){
-        await* createBatchThread(TEST_GROUP_ID, NNS_PROPOSAL_GROUP_ID, List.toArray(chunk));
-       };
-        pendingSCMList := List.nil<TT.ProposalAPI>();
-    }
-  };
 
   func createProposalThread(targetGroupId : Text, votingGroupId : Text, proposal : TT.ProposalAPI) : async* (){
     let text = TU.formatProposal(proposal);
