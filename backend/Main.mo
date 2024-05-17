@@ -83,14 +83,22 @@ shared ({ caller }) actor class OCBot() = Self {
     }
   };
 
-  public func getLogs(height : ?Nat) : async [(LS.LogLevel, Text)] {
+  public func getLogs(height : ?Nat) : async [LS.Log] {
     logService.getLogs(height);
   };
 
+  public func clearLogs(height : ?Nat) : async Result.Result<(), Text> {
+    if (not G.isCustodian(caller, custodians)) {
+      return #err("Not authorized");
+    };
+    logService.clearLogs(height);
+    #ok()
+  };
 
-  public func initTimer<system>(_tickrate : ?Nat) : async Result.Result<(), Text> {
+
+  public func initTimer<system>(_tickrateInSeconds : ?Nat) : async Result.Result<(), Text> {
             
-    let tickrate : Nat = Option.get(_tickrate, 5 * 60); // 5 minutes
+    let tickrate : Nat = Option.get(_tickrateInSeconds, 5 * 60); // 5 minutes
     switch(timerId){
         case(?t){ return #err("Timer already created")};
         case(_){};
