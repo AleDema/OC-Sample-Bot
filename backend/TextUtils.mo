@@ -14,7 +14,7 @@ module {
       case(8){
         return #SCM;
       };
-      case(12){
+      case(13){
         return #RVM;
       };
       case(_){
@@ -42,10 +42,20 @@ module {
   };
 
   public func formatProposalThreadMsg(ocGroupId : Text, proposalId : Nat, ocGroupMessageId : ?Nat) : Text {
-    var text = "[Dashboard Link](https://dashboard.internetcomputer.org/proposal/" # Nat.toText(proposalId) # ")\n";
+    var text = "Proposal " # Nat.toText(proposalId) # ":\n";
+    text :=  text # "[Dashboard Link](https://dashboard.internetcomputer.org/proposal/" # Nat.toText(proposalId) # ")\n";
     if (Option.isSome(ocGroupMessageId)) {
       text := text # "[OpenChat Link to vote](https://oc.app/group" # ocGroupId # "/" # Nat.toText(Option.get(ocGroupMessageId, 0)) # "\n";
     };
+    text
+  };
+
+  public func formatBatchProposalThreadMsg(ocGroupId : Text, proposals : [TT.ProposalAPI]) : Text {
+    var text = "";
+    for (proposal in Array.vals(proposals)) {
+      text := text # formatProposalThreadMsg(ocGroupId, proposal.id, null) # "\n\n";
+    };
+    text
   };
 
   public func isSeparateBuildProcess(title : Text) : Bool {

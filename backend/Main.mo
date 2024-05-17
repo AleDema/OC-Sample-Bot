@@ -48,13 +48,34 @@ shared ({ caller }) actor class OCBot() = Self {
   stable var botName : Text = "";
   stable var botDisplayName : ?Text = null;
   stable var lastMessageID : Nat = 0; //TODO: reconsider
-
-  stable var latestMessageIndex = 0;
   stable var latestProposalID = 0;
 
   stable var lastProposalId : ?Nat = null;
   stable var activeProposalMessages= Map.new<Nat, OC.MessageId>();
   stable var timerId :?Nat = null;
+
+  stable var pendingSCMList = List.nil<TT.ProposalAPI>();
+  stable var lastSCMListUpdate  : ?Time.Time = null;
+  stable var latestNNSMessageIndex : ?Nat = null;
+  let MAX_SCM_WAIT_FOR_QUIET = 10 * 60 * 1000; // 10 minutes
+  type Testmap = Map.Map<Nat, (TT.ProposalAPI, Nat)>;
+  stable let testmap : Testmap = Map.new<Nat, (TT.ProposalAPI, Nat)>();
+
+  let BATCH_SIZE = 50;
+
+  func topicIdToVariant(topic : Int32) : {#RVM; #SCM; #OTHER}{
+    switch(topic){
+      case(8){
+        return #SCM;
+      };
+      case(13){
+        return #RVM;
+      };
+      case(_){
+        return #OTHER;
+      }
+    }
+  };
 
 
   public func initTimer<system>(_tickrate : ?Nat) : async Result.Result<(), Text> {
@@ -66,36 +87,104 @@ shared ({ caller }) actor class OCBot() = Self {
     };
 
     timerId := ?Timer.recurringTimer<system>(#seconds(tickrate), func() : async () {
-            ignore await* updateGroup();
+      await updateGroup(null);
     });
 
     return #ok()
   };
 
-  func topicIdToVariant(topic : Int32) : {#RVM; #SCM; #OTHER}{
-    switch(topic){
-      case(8){
-        return #SCM;
-      };
-      case(12){
-        return #RVM;
-      };
-      case(_){
-        return #OTHER;
-      }
-    }
+  // func matchProposalsWithMessages(groupId : Text, pendingList : Testmap) : async* Result.Result<(), Text>{
+  //   var index = switch(await* getLatestMessageIndex(NNS_PROPOSAL_GROUP_ID)){
+  //     case(?index){index};
+  //     case(_){return #err("Error")};
+  //   };
+
+  //   var current = index;
+  //   label attempts while (Nat32.toNat(current) > Option.get(latestNNSMessageIndex, 0) +  BATCH_SIZE ){
+  //     //generate ranges for message indexes to fetch
+  //     let end = do {
+  //       if(Option.get(latestNNSMessageIndex, 0) + BATCH_SIZE  > Nat32.toNat(current)){
+  //         Option.get(latestNNSMessageIndex, 0);
+  //       } else {
+  //         current := current - Nat32.fromNat(BATCH_SIZE);
+  //         Nat32.toNat(current)
+  //       };
+  //     };
+
+  //     let indexVec = Iter.range(Nat32.toNat(current), end) |> 
+  //                       Iter.map(_, func (n : Nat) : Nat32 {Nat32.fromNat(n)}) |> 
+  //                         Iter.toArray(_);
+    
+  //     current := current - Nat32.fromNat(BATCH_SIZE);
+
+  //     let #ok(res) = await* getGroupMessagesByIndex(NNS_PROPOSAL_GROUP_ID, indexVec, null)
+  //     else {
+  //       //Error retrieving messages
+  //       continue attempts;
+  //     };
+
+
+  //      label process for ((k,v ) in Map.entries(testmap)){
+          
+  //       };
+
+  //     label messages for (message in res.messages.vals()){ 
+  //       let #ok(proposalData) = getNNSProposalMessageData(message)
+  //       else {
+  //          //This shouldn't happen unless OC changes something
+  //          //TODO: log
+  //          continue messages;
+  //       };
+
+
+
+  //     };
+  //   };
+
+  //   #ok();
+  // };
+
+  public func testContains(text : Text) : async Bool {
+    return TU.isSeparateBuildProcess(text);
   };
 
-  stable var pendingSCMList = List.nil<TT.ProposalAPI>();
-  stable var lastSCMListUpdate  : ?Time.Time = null;
-  let MAX_SCM_WAIT_FOR_QUIET = 10 * 60 * 1000; // 10 minutes
+  public func testSetLastProposalId(proposalId : Nat) : async () {
+    lastProposalId := ?proposalId;
+  };
 
-  func updateGroup() : async* () {
+  stable var breakDebug = false;
+
+  public func testBreak() : async () {
+    breakDebug:= true;
+  };
+
+
+  func checkBreak() : Bool {
+    if (breakDebug){
+      breakDebug:= false;
+      return true
+    };
+    return false;
+  };
+
+  public func updateGroup(_start : ?Nat) : async () {
     let tracker : TT.Tracker = actor ("vkqwa-eqaaa-aaaap-qhira-cai");
-    let res = await tracker.getProposals(GOVERNANCE_ID, null, [12]);
+    var start = lastProposalId;
+    if (Option.isSome(_start)){
+      start := _start;
+    };
+
+    let res = await tracker.getProposals(GOVERNANCE_ID, start, [8]);
     switch(res){
       case(#ok(data)){
+          // for(proposal in Array.vals(data)){
+          //   Map.set(test, proposal.id, (proposal, 0));
+          // };
+
           for(proposal in Array.vals(data)){
+            if (checkBreak()){
+              return;
+            };
             switch(topicIdToVariant(proposal.topicId)){
               case(#RVM){
                 await* createProposalThread(TEST_GROUP_ID, NNS_PROPOSAL_GROUP_ID, proposal);
@@ -121,24 +210,44 @@ shared ({ caller }) actor class OCBot() = Self {
         switch(e){
           case(#InvalidProposalId(d)){
             lastProposalId := ?d.start;
-            await* updateGroup();
+            //await updateGroup();
           };
           case(_){};
         }
       };
     };
 
-    if(List.size(pendingSCMList) > 0 and Time.now() - MAX_SCM_WAIT_FOR_QUIET > Option.get(lastSCMListUpdate, Time.now())){
-
+    if((List.size(pendingSCMList) > 0 and Time.now() - MAX_SCM_WAIT_FOR_QUIET > Option.get(lastSCMListUpdate, Time.now()))){
+      let arr = List.toArray(pendingSCMList);
+      await* createBatchThread(TEST_GROUP_ID, NNS_PROPOSAL_GROUP_ID, arr);
+      pendingSCMList := List.nil<TT.ProposalAPI>();
+    } else if (List.size(pendingSCMList) > 10){
+        let chunks = List.chunks(10, pendingSCMList);
+       for(chunk in List.toIter(chunks)){
+        await* createBatchThread(TEST_GROUP_ID, NNS_PROPOSAL_GROUP_ID, List.toArray(chunk));
+       };
+        pendingSCMList := List.nil<TT.ProposalAPI>();
     }
   };
 
-  func createProposalThread(targetGroupId : Text, votingGroupId : Text, proposal : [TT.ProposalAPI]) : async* (){
-    let text = TU.formatProposals(proposal);
+  func createProposalThread(targetGroupId : Text, votingGroupId : Text, proposal : TT.ProposalAPI) : async* (){
+    let text = TU.formatProposal(proposal);
     let res = await* sendTextMessageToGroup(targetGroupId, text, null);
     switch(res){
       case(#Success(d)){
         let text2 = TU.formatProposalThreadMsg(votingGroupId, proposal.id, null);
+        let res = await* sendTextMessageToGroup(targetGroupId, text2, ?d.message_index);
+      };
+      case(_){};
+    }
+  };
+
+  func createBatchThread(targetGroupId : Text, votingGroupId : Text, proposalList : [TT.ProposalAPI]) : async* (){
+    let text = TU.formatProposals(proposalList);
+    let res = await* sendTextMessageToGroup(targetGroupId, text, null);
+    switch(res){
+      case(#Success(d)){
+        let text2 = TU.formatBatchProposalThreadMsg(votingGroupId, proposalList);
         let res = await* sendTextMessageToGroup(targetGroupId, text2, ?d.message_index);
       };
       case(_){};
@@ -375,6 +484,7 @@ shared ({ caller }) actor class OCBot() = Self {
       };
     };
   };
+
 
   let messageRange : Nat32 = 10;
   // Attempt to send messages for new proposals and register the corresponding message ID in the associative map.
