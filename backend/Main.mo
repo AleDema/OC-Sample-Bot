@@ -22,6 +22,7 @@ import OC "./OCTypes";
 import MT "./MetricTypes";
 import F "./Fixtures";
 import TT "./TrackerTypes";
+import LS "./LogService";
 import {MINUTE} "mo:time-consts";
 
 shared ({ caller }) actor class OCBot() = Self {
@@ -63,6 +64,9 @@ shared ({ caller }) actor class OCBot() = Self {
   stable let testmap : Testmap = Map.new<Nat, (TT.ProposalAPI, Nat)>();
   stable var numberOfTicksSinceUpdate = 0;
 
+  stable let logs = LS.initLogModel();
+  let logService = LS.LogServiceImpl(logs, 100, true);
+
   let BATCH_SIZE = 50;
 
   func topicIdToVariant(topic : Int32) : {#RVM; #SCM; #OTHER}{
@@ -77,6 +81,10 @@ shared ({ caller }) actor class OCBot() = Self {
         return #OTHER;
       }
     }
+  };
+
+  public func getLogs(height : ?Nat) : async [(LS.LogLevel, Text)] {
+    logService.getLogs(height);
   };
 
 
@@ -145,10 +153,12 @@ shared ({ caller }) actor class OCBot() = Self {
   let MESSAGE_SIZE_LIMIT = 10;
   let MAX_TICKS_WITHOUT_UPDATE = 3;
   public func updateGroup(start : ?Nat) : async () {
+    logService.log(#Info, "Running update");
     let tracker : TT.Tracker = actor ("vkqwa-eqaaa-aaaap-qhira-cai");
 
     numberOfTicksSinceUpdate := numberOfTicksSinceUpdate + 1;
-    let res = await tracker.getProposals(GOVERNANCE_ID, start, [8]);
+    logService.log(#Info, "Number of ticks since last update: " # Nat.toText(numberOfTicksSinceUpdate));
+    let res = await tracker.getProposals(GOVERNANCE_ID, start, [8, 13]);
     switch(res){
       case(#ok(data)){
           // for(proposal in Array.vals(data)){
@@ -172,6 +182,7 @@ shared ({ caller }) actor class OCBot() = Self {
                     pendingSCMList := List.push(proposal, pendingSCMList);
                     //lastSCMListUpdate := ?Time.now();
                     numberOfTicksSinceUpdate := 0;
+                    logService.log(#Info, "Pushing to list");
                 };
 
               };
@@ -186,6 +197,7 @@ shared ({ caller }) actor class OCBot() = Self {
       case(#err(e)){
         switch(e){
           case(#InvalidProposalId(d)){
+            logService.log(#Info, "InvalidProposalId, init last proposal id to: " # Nat.toText(d.start));
             lastProposalId := ?d.start;
             //await updateGroup();
           };
@@ -196,10 +208,12 @@ shared ({ caller }) actor class OCBot() = Self {
 
     //if((List.size(pendingSCMList) > 0 and List.size(pendingSCMList) < MESSAGE_SIZE_LIMIT and Time.now() - MAX_SCM_WAIT_FOR_QUIET > Option.get(lastSCMListUpdate, Time.now()))){
     if((List.size(pendingSCMList) > 0 and List.size(pendingSCMList) < MESSAGE_SIZE_LIMIT and numberOfTicksSinceUpdate > MAX_TICKS_WITHOUT_UPDATE)){
+      logService.log(#Info, "Sending pending list cause wait for quiet expired");
       let arr = List.toArray(pendingSCMList);
       await* createBatchThread(TEST_GROUP_ID, NNS_PROPOSAL_GROUP_ID, arr);
       pendingSCMList := List.nil<TT.ProposalAPI>();
     } else if (List.size(pendingSCMList) > MESSAGE_SIZE_LIMIT){
+        logService.log(#Info, "Sending pending list cause too may entries");
         let chunks = List.chunks(MESSAGE_SIZE_LIMIT, pendingSCMList);
         for(chunk in List.toIter(chunks)){
           if (List.size(chunk) < MESSAGE_SIZE_LIMIT){
