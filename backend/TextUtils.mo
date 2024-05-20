@@ -34,7 +34,7 @@ module {
     var text = "Proposal " # Nat.toText(proposalId) # ":\n";
     text :=  text # "[Dashboard Link](https://dashboard.internetcomputer.org/proposal/" # Nat.toText(proposalId) # ")\n";
     if (Option.isSome(ocGroupMessageId)) {
-      text := text # "[OpenChat Link to vote](https://oc.app/group" # ocGroupId # "/" # Nat32.toText(Option.get(ocGroupMessageId, Nat32.fromNat(0))) # "\n";
+      text := text # "[OpenChat Link to vote](https://oc.app/group/" # ocGroupId # "/" # Nat32.toText(Option.get(ocGroupMessageId, Nat32.fromNat(0))) # ")" # "\n";
     };
     text
   };
