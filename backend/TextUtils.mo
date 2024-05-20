@@ -6,27 +6,16 @@ import Principal "mo:base/Principal";
 import Option "mo:base/Option";
 import Nat64 "mo:base/Nat64";
 import Text "mo:base/Text";
+import Nat32 "mo:base/Nat32";
+import Map "mo:map/Map";
 
 module {
-
-  func topicIdToVariant(topic : Int32) : {#RVM; #SCM; #OTHER}{
-    switch(topic){
-      case(8){
-        return #SCM;
-      };
-      case(13){
-        return #RVM;
-      };
-      case(_){
-        return #OTHER;
-      }
-    }
-  };
+  let { nhash; n64hash; n32hash } = Map;
 
   public func formatProposal(proposal : TT.ProposalAPI) : Text {
     var text = "Proposal " # Nat.toText(proposal.id) # ":\n";
     text := text # "Title: " # proposal.title # "\n";
-    text := text # "Topic: " # proposalTopicToText(topicIdToVariant(proposal.topicId)) # "\n";
+    text := text # "Topic: " # proposalTopicToText(T.topicIdToVariant(proposal.topicId)) # "\n";
     //add type
     //add date created
     text := text # "Proposer: " # Nat64.toText(proposal.proposer) # "\n";
@@ -41,19 +30,22 @@ module {
     text
   };
 
-  public func formatProposalThreadMsg(ocGroupId : Text, proposalId : Nat, ocGroupMessageId : ?Nat) : Text {
+  public func formatProposalThreadMsg(ocGroupId : Text, proposalId : Nat, ocGroupMessageId : ?Nat32) : Text {
     var text = "Proposal " # Nat.toText(proposalId) # ":\n";
     text :=  text # "[Dashboard Link](https://dashboard.internetcomputer.org/proposal/" # Nat.toText(proposalId) # ")\n";
     if (Option.isSome(ocGroupMessageId)) {
-      text := text # "[OpenChat Link to vote](https://oc.app/group" # ocGroupId # "/" # Nat.toText(Option.get(ocGroupMessageId, 0)) # "\n";
+      text := text # "[OpenChat Link to vote](https://oc.app/group" # ocGroupId # "/" # Nat32.toText(Option.get(ocGroupMessageId, Nat32.fromNat(0))) # "\n";
     };
     text
   };
 
-  public func formatBatchProposalThreadMsg(ocGroupId : Text, proposals : [TT.ProposalAPI]) : Text {
+  public func formatBatchProposalThreadMsg(ocGroupId : Text, proposals : [TT.ProposalAPI], proposalsLookup : T.ProposalsLookup) : Text {
     var text = "";
     for (proposal in Array.vals(proposals)) {
-      text := text # formatProposalThreadMsg(ocGroupId, proposal.id, null) # "\n\n";
+      let _ = do ?{
+        let tmp = Map.get(proposalsLookup, nhash, proposal.id);
+        text := text # formatProposalThreadMsg(ocGroupId, proposal.id, tmp!.messageIndex) # "\n\n";
+      };
     };
     text
   };

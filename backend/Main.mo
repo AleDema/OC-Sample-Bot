@@ -14,6 +14,7 @@ import Option "mo:base/Option";
 import Int "mo:base/Int";
 import Array "mo:base/Array";
 import Timer "mo:base/Timer";
+import Int32 "mo:base/Int32";
 import Map "mo:map/Map";
 import T "./Types";
 import TU "./TextUtils";
@@ -23,7 +24,6 @@ import MT "./MetricTypes";
 import F "./Fixtures";
 import TT "./TrackerTypes";
 import LS "./LogService";
-import {MINUTE} "mo:time-consts";
 
 shared ({ caller }) actor class OCBot() = Self {
 
@@ -31,6 +31,10 @@ shared ({ caller }) actor class OCBot() = Self {
   // set avatar
 
   let TEST_MODE = true;
+
+  let FIND_PROPOSALS_BATCH_SIZE : Nat32 = 100;
+  let PENDING_SCM_LIMIT = 10;
+  let MAX_TICKS_WITHOUT_UPDATE = 3;
 
   let USER_INDEX_CANISTER = "4bkt6-4aaaa-aaaaf-aaaiq-cai";
   let LOCAL_USER_INDEX_ID = "nq4qv-wqaaa-aaaaf-bhdgq-cai";
@@ -45,60 +49,26 @@ shared ({ caller }) actor class OCBot() = Self {
   stable var custodians = List.make<Principal>(caller);
   stable var groups = List.nil<Principal>();
   stable var activeProposals = Map.new<OC.ProposalId, OC.MessageId>();
-  stable var activeProposals2 = Map.new<OC.ProposalId, Map.Map<T.TextPrincipal, OC.MessageId>>();
   stable var botStatus : T.BotStatus = #NotInitialized;
   stable var botName : Text = "";
   stable var botDisplayName : ?Text = null;
   stable var lastMessageID : Nat = 0; //TODO: reconsider
-  stable var latestProposalID = 0;
 
   stable var lastProposalId : ?Nat = null;
-  stable var activeProposalMessages= Map.new<Nat, OC.MessageId>();
   stable var timerId :?Nat = null;
-
   stable var pendingSCMList = List.nil<TT.ProposalAPI>();
-  stable var lastSCMListUpdate  : ?Time.Time = null;
-  stable var latestNNSMessageIndex : ?Nat = null;
-  let MAX_SCM_WAIT_FOR_QUIET : Nat = 10 * MINUTE; // 10 minutes
-  type Testmap = Map.Map<Nat, (TT.ProposalAPI, Nat)>;
-  stable let testmap : Testmap = Map.new<Nat, (TT.ProposalAPI, Nat)>();
+  stable var latestNNSMessageIndex : ?Nat32 = null;
+  stable let proposalsLookup : T.ProposalsLookup = Map.new();
   stable var numberOfTicksSinceUpdate = 0;
 
   stable let logs = LS.initLogModel();
   let logService = LS.LogServiceImpl(logs, 100, true);
 
-  let BATCH_SIZE = 50;
-
-  func topicIdToVariant(topic : Int32) : {#RVM; #SCM; #OTHER}{
-    switch(topic){
-      case(8){
-        return #SCM;
-      };
-      case(13){
-        return #RVM;
-      };
-      case(_){
-        return #OTHER;
-      }
-    }
-  };
-
-  public func getLogs(height : ?Nat) : async [LS.Log] {
-    logService.getLogs(height);
-  };
-
-  public func clearLogs(height : ?Nat) : async Result.Result<(), Text> {
-    if (not G.isCustodian(caller, custodians)) {
-      return #err("Not authorized");
-    };
-    logService.clearLogs(height);
-    #ok()
-  };
-
+  stable var breakDebug = false;
 
   public func initTimer<system>(_tickrateInSeconds : ?Nat) : async Result.Result<(), Text> {
             
-    let tickrate : Nat = Option.get(_tickrateInSeconds, 5 * 60); // 5 minutes
+    let tickrate : Nat = Option.get(_tickrateInSeconds, 5* 60); // 1 minutes
     switch(timerId){
         case(?t){ return #err("Timer already created")};
         case(_){};
@@ -127,20 +97,17 @@ shared ({ caller }) actor class OCBot() = Self {
     }
   };
 
-  public func testContains(text : Text) : async Bool {
-    return TU.isSeparateBuildProcess(text);
-  };
-
   public func testSetLastProposalId(proposalId : Nat) : async () {
     lastProposalId := ?proposalId;
   };
 
-  stable var breakDebug = false;
+  public func testGetLastProposalId() : async ?Nat {
+    lastProposalId
+  };
 
   public func testBreak() : async () {
     breakDebug:= true;
   };
-
 
   func checkBreak() : Bool {
     if (breakDebug){
@@ -150,7 +117,7 @@ shared ({ caller }) actor class OCBot() = Self {
     return false;
   };
 
-  public func debugList() : async ([TT.ProposalAPI], Nat, Nat){
+  public func getPendignList() : async ([TT.ProposalAPI], Nat, Nat){
     (List.toArray(pendingSCMList), numberOfTicksSinceUpdate, List.size(pendingSCMList))
   };
 
@@ -158,8 +125,15 @@ shared ({ caller }) actor class OCBot() = Self {
     pendingSCMList := List.nil<TT.ProposalAPI>();
   };
 
-  let MESSAGE_SIZE_LIMIT = 10;
-  let MAX_TICKS_WITHOUT_UPDATE = 3;
+  public func getProposalsLookup() : async [(Nat, {proposalData : TT.ProposalAPI; messageIndex : ?Nat32; attempts : Nat})] {
+    Map.toArray(proposalsLookup);
+  };
+
+  public func clearProposalsLookup() : async (){
+    Map.clear(proposalsLookup);
+  };
+  
+
   public func updateGroup(start : ?Nat) : async () {
     logService.log(#Info, "Running update");
     let tracker : TT.Tracker = actor ("vkqwa-eqaaa-aaaap-qhira-cai");
@@ -169,148 +143,233 @@ shared ({ caller }) actor class OCBot() = Self {
     let res = await tracker.getProposals(GOVERNANCE_ID, start, [8, 13]);
     switch(res){
       case(#ok(data)){
-          // for(proposal in Array.vals(data)){
-          //   Map.set(test, proposal.id, (proposal, 0));
-          // };
-
           for(proposal in Array.vals(data)){
-            //TODO: remove, needed to stop when testing
-            if (checkBreak()){
-              return;
-            };
+            Map.set(proposalsLookup, nhash, proposal.id, { proposalData = proposal; messageIndex = null; attempts = 0});
+          };
 
-            switch(topicIdToVariant(proposal.topicId)){
-              case(#RVM){
-                await* createProposalThread(TEST_GROUP_ID, NNS_PROPOSAL_GROUP_ID, proposal);
-              };
-              case(#SCM){
-                if(TU.isSeparateBuildProcess(proposal.title)){
-                  await* createProposalThread(TEST_GROUP_ID, NNS_PROPOSAL_GROUP_ID, proposal);  
-                } else {
-                    pendingSCMList := List.push(proposal, pendingSCMList);
-                    //lastSCMListUpdate := ?Time.now();
-                    numberOfTicksSinceUpdate := 0;
-                    logService.log(#Info, "Pushing to list");
-                };
-
-              };
-              case(_){};
-            };
-
-            if(proposal.id > Option.get(lastProposalId, 0)){
-              lastProposalId := ?proposal.id;
-            };
-        };
+          ignore await* matchProposalsWithMessages(NNS_PROPOSAL_GROUP_ID, proposalsLookup);
       };
       case(#err(e)){
         switch(e){
           case(#InvalidProposalId(d)){
-            logService.log(#Info, "InvalidProposalId, init last proposal id to: " # Nat.toText(d.start));
-            lastProposalId := ?d.start;
+            logService.log(#Info, "InvalidProposalId, set last proposal id to: " # Nat.toText(d.end + 1));
+            lastProposalId := ?(d.end + 1); //TODO; remove temp fix until poll service is fixed
             //await updateGroup();
           };
           case(_){};
-        }
+        };
       };
     };
 
-    //if((List.size(pendingSCMList) > 0 and List.size(pendingSCMList) < MESSAGE_SIZE_LIMIT and Time.now() - MAX_SCM_WAIT_FOR_QUIET > Option.get(lastSCMListUpdate, Time.now()))){
-    if((List.size(pendingSCMList) > 0 and List.size(pendingSCMList) < MESSAGE_SIZE_LIMIT and numberOfTicksSinceUpdate > MAX_TICKS_WITHOUT_UPDATE)){
+    for(proposal in Map.vals(proposalsLookup)){
+        //TODO: remove, needed to stop when testing
+        if (checkBreak()){
+          return;
+        };
+
+        switch(T.topicIdToVariant(proposal.proposalData.topicId)){
+          case(#RVM){
+            if(Option.isSome(proposal.messageIndex) or proposal.attempts > 3){
+              await* createProposalThread(TEST_GROUP_ID, NNS_PROPOSAL_GROUP_ID, proposal.proposalData, proposal.messageIndex);
+              Map.delete(proposalsLookup, nhash, proposal.proposalData.id);
+            }
+          };
+          case(#SCM){
+            if(TU.isSeparateBuildProcess(proposal.proposalData.title)){
+              if(Option.isSome(proposal.messageIndex) or proposal.attempts > 3){
+                await* createProposalThread(TEST_GROUP_ID, NNS_PROPOSAL_GROUP_ID, proposal.proposalData, proposal.messageIndex);
+                Map.delete(proposalsLookup, nhash, proposal.proposalData.id);
+              };
+            } else {
+                pendingSCMList := List.push(proposal.proposalData, pendingSCMList);
+                //lastSCMListUpdate := ?Time.now();
+                numberOfTicksSinceUpdate := 0;
+                logService.log(#Info, "Pushing to list");
+            };
+
+          };
+          case(_){};
+        };
+
+        if(proposal.proposalData.id > Option.get(lastProposalId, 0)){
+          lastProposalId := ?(proposal.proposalData.id + 1); //TODO; remove temp fix until poll service is fixed
+        };
+      };
+
+    if((List.size(pendingSCMList) > 0 and List.size(pendingSCMList) < PENDING_SCM_LIMIT and numberOfTicksSinceUpdate > MAX_TICKS_WITHOUT_UPDATE)){
       logService.log(#Info, "Sending pending list cause wait for quiet expired");
       let arr = List.toArray(pendingSCMList);
-      await* createBatchThread(TEST_GROUP_ID, NNS_PROPOSAL_GROUP_ID, arr);
+      await* createBatchThread(TEST_GROUP_ID, NNS_PROPOSAL_GROUP_ID, arr, proposalsLookup);
+      for (p in Array.vals(arr) ){
+        Map.delete(proposalsLookup, nhash, p.id);
+      };
       pendingSCMList := List.nil<TT.ProposalAPI>();
-    } else if (List.size(pendingSCMList) > MESSAGE_SIZE_LIMIT){
+    } else if (List.size(pendingSCMList) > PENDING_SCM_LIMIT){
         logService.log(#Info, "Sending pending list cause too may entries");
-        let chunks = List.chunks(MESSAGE_SIZE_LIMIT, pendingSCMList);
+        let chunks = List.chunks(PENDING_SCM_LIMIT, pendingSCMList);
         for(chunk in List.toIter(chunks)){
-          if (List.size(chunk) < MESSAGE_SIZE_LIMIT){
+          if (List.size(chunk) < PENDING_SCM_LIMIT){
               pendingSCMList := chunk;
               return;
           } else {
-            await* createBatchThread(TEST_GROUP_ID, NNS_PROPOSAL_GROUP_ID, List.toArray(chunk));
+            await* createBatchThread(TEST_GROUP_ID, NNS_PROPOSAL_GROUP_ID, List.toArray(chunk), proposalsLookup);
+            for ( p in List.toIter(chunk) ){
+              Map.delete(proposalsLookup, nhash, p.id);
+            };
           }
         };
         pendingSCMList := List.nil<TT.ProposalAPI>();
-    }
+    };
+
+    logService.log(#Info, "Finished update");
   };
 
-  // func matchProposalsWithMessages(groupId : Text, pendingList : Testmap) : async* Result.Result<(), Text>{
-  //   var index = switch(await* getLatestMessageIndex(NNS_PROPOSAL_GROUP_ID)){
-  //     case(?index){index};
-  //     case(_){return #err("Error")};
-  //   };
+  var tempMap = Map.new<Nat, OC.MessageIndex>();
+  func matchProposalsWithMessages(groupId : Text, pending : T.ProposalsLookup) : async* Result.Result<(), Text>{
+    //map is empty, nothing to match
+    if(Map.size(pending) == 0){
+      logService.log(#Info, "[matchProposalsWithMessages] Map empty");
+      return #ok();
+    };
 
-  //   var current = index;
-  //   label attempts while (Nat32.toNat(current) > Option.get(latestNNSMessageIndex, 0) +  BATCH_SIZE ){
-  //     //generate ranges for message indexes to fetch
-  //     let end = do {
-  //       if(Option.get(latestNNSMessageIndex, 0) + BATCH_SIZE  > Nat32.toNat(current)){
-  //         Option.get(latestNNSMessageIndex, 0);
-  //       } else {
-  //         current := current - Nat32.fromNat(BATCH_SIZE);
-  //         Nat32.toNat(current)
-  //       };
-  //     };
+    var index = switch(await* getLatestMessageIndex(groupId)){
+      case(?index){index};
+      case(_){
+         logService.log(#Info, "[matchProposalsWithMessages] getLatestMessageIndex error");
+        return #err("Error")};
+    };
 
-  //     let indexVec = Iter.range(Nat32.toNat(current), end) |> 
-  //                       Iter.map(_, func (n : Nat) : Nat32 {Nat32.fromNat(n)}) |> 
-  //                         Iter.toArray(_);
+    //if the index is the same as the latest message index, nothing to match
+    if(index == Option.get(latestNNSMessageIndex, index + 1)){
+      logService.log(#Info, "[matchProposalsWithMessages] up to date");
+      return #ok();
+    };
+
+
+    var start = index;
+    var check = true;
+    label attempts while (check){
+
+      //if latestNNSMessageIndex is null, get last BATCH_SIZE once
+      if(Option.isNull(latestNNSMessageIndex)){
+        logService.log(#Info, "[matchProposalsWithMessages] latestNNSMessageIndex is null");
+        check := false;
+      };
+
+
+      var end = start - FIND_PROPOSALS_BATCH_SIZE;
+      if (end <= Option.get(latestNNSMessageIndex, end - 1)){
+        end := Option.get(latestNNSMessageIndex, Nat32.fromNat(0)) + 1;
+        check := false;
+        logService.log(#Info, "[matchProposalsWithMessages] reached end");
+      };
+
+      logService.log(#Info, "[matchProposalsWithMessages]start: " #  Nat32.toText(start) # " end: " # Nat32.toText(end));
+      //generate ranges for message indexes to fetch
+      let indexVec = Iter.range(Nat32.toNat(end), Nat32.toNat(start)) |> 
+                        Iter.map(_, func (n : Nat) : Nat32 {Nat32.fromNat(n)}) |> 
+                          Iter.toArray(_);
     
-  //     current := current - Nat32.fromNat(BATCH_SIZE);
+      start := end;
 
-  //     let #ok(res) = await* getGroupMessagesByIndex(NNS_PROPOSAL_GROUP_ID, indexVec, null)
-  //     else {
-  //       //Error retrieving messages
-  //       continue attempts;
-  //     };
+      let #ok(res) = await* getGroupMessagesByIndex(groupId, indexVec, null)
+      else {
+        //Error retrieving messages
+        logService.log(#Error, "Error retrieving messages");
+        continue attempts;
+      };
+      
+      tempMap := Map.new<Nat, OC.MessageIndex>();
+      label messages for (message in Array.vals(res.messages)){ 
+        let #ok(proposalData) = getNNSProposalMessageData(message)
+          else {
+            //This shouldn't happen unless OC changes something
+            logService.log(#Error, "error in getNNSProposalMessageData()");
+            continue messages;
+          };
+          //logService.log(#Info, "Test");
+          Map.set(tempMap, nhash, Nat64.toNat(proposalData.proposalId), proposalData.messageIndex);
+      };
 
+      var f = true;
+      label process for ((k,v) in Map.entries(pending)){
+        if (Option.isNull(v.messageIndex)){
+          f := false;
+        };
+        switch(Map.get(tempMap, nhash, k)){
+          case(?val){
+            Map.set(pending, nhash, k, {v with messageIndex = ?val});
+          };
+          case(_){
+            Map.set(pending, nhash, k, {v with attempts = v.attempts + 1});
+          }
+        }
+      };
+      //if all proposals have a message index, stop
+      if(f){
+        check := false;
+      };
+    };  
 
-  //      label process for ((k,v ) in Map.entries(testmap)){
-          
-  //       };
+    //todo: reenable
+    //latestNNSMessageIndex := ?index;
+    #ok();
+  };
 
-  //     label messages for (message in res.messages.vals()){ 
-  //       let #ok(proposalData) = getNNSProposalMessageData(message)
-  //       else {
-  //          //This shouldn't happen unless OC changes something
-  //          //TODO: log
-  //          continue messages;
-  //       };
+  public func testRange(start: Int, end: Nat) : async Result.Result<([OC.MessageEventWrapper], [Nat32]), ()>{
+    let indexVec = Iter.range(end, start) |> 
+                      Iter.map(_, func (n : Nat) : Nat32 {Nat32.fromNat(n)}) |> 
+                        Iter.toArray(_);
 
+    let #ok(res) = await* getGroupMessagesByIndex(NNS_PROPOSAL_GROUP_ID, indexVec, null)
+    else {
+      //Error retrieving messages
+      logService.log(#Error, "[testRange] Error retrieving messages");
+      return #err();
+    };
 
+    #ok((res.messages, indexVec))
 
-  //     };
-  //   };
+  };
 
-  //   #ok();
-  // };
+  public func getLatestNNSMessageIndex() : async?Nat32{
+    latestNNSMessageIndex;
+  };
 
-  func createProposalThread(targetGroupId : Text, votingGroupId : Text, proposal : TT.ProposalAPI) : async* (){
+  public func setLatestNNSMessageIndex(index :?Nat32) : async (){
+    latestNNSMessageIndex := index;
+  };
+
+  public func getTempMap() : async [(Nat, OC.MessageIndex)]{
+    Map.toArray(tempMap);
+  };
+
+  func createProposalThread(targetGroupId : Text, votingGroupId : Text, proposal : TT.ProposalAPI, messageIndex : ?Nat32) : async* (){
+    //logService.log(#Info, "[createProposalThread] Creating proposal thread: " # Nat.toText(proposal.id) # " messageIndex: " # Nat32.toText(Option.get(messageIndex, Nat32.fromNat(0))));
     let text = TU.formatProposal(proposal);
     let res = await* sendTextMessageToGroup(targetGroupId, text, null);
     switch(res){
       case(#Success(d)){
-        let text2 = TU.formatProposalThreadMsg(votingGroupId, proposal.id, null);
+        let text2 = TU.formatProposalThreadMsg(votingGroupId, proposal.id, messageIndex);
         let res = await* sendTextMessageToGroup(targetGroupId, text2, ?d.message_index);
       };
       case(_){};
     }
   };
 
-  func createBatchThread(targetGroupId : Text, votingGroupId : Text, proposalList : [TT.ProposalAPI]) : async* (){
+  func createBatchThread(targetGroupId : Text, votingGroupId : Text, proposalList : [TT.ProposalAPI], proposalsLookup : T.ProposalsLookup) : async* (){
     let text = TU.formatProposals(proposalList);
     let res = await* sendTextMessageToGroup(targetGroupId, text, null);
     switch(res){
       case(#Success(d)){
-        let text2 = TU.formatBatchProposalThreadMsg(votingGroupId, proposalList);
+        let text2 = TU.formatBatchProposalThreadMsg(votingGroupId, proposalList, proposalsLookup);
         let res = await* sendTextMessageToGroup(targetGroupId, text2, ?d.message_index);
       };
       case(_){};
     }
   };
 
-  public shared({caller}) func initBot(name : Text, displayName : ?Text) : async Result.Result<Text, Text>{
+  public shared({caller}) func initBot<system>(name : Text, displayName : ?Text) : async Result.Result<Text, Text>{
     if (not G.isCustodian(caller, custodians)) {
       return #err("Not authorized");
     };
@@ -319,7 +378,7 @@ shared ({ caller }) actor class OCBot() = Self {
       case(#NotInitialized){
         botStatus := #Initializing;
 
-        Cycles.add(BOT_REGISTRATION_FEE);
+        Cycles.add<system>(BOT_REGISTRATION_FEE);
         let user_index : OC.UserIndexCanister = actor (USER_INDEX_CANISTER);
         try{
           let res = await user_index.c2c_register_bot({username= name; display_name= displayName});
@@ -750,9 +809,9 @@ shared ({ caller }) actor class OCBot() = Self {
   };
 
   public shared({caller}) func testGetNNSProposals(indexes : [Nat32]) : async Result.Result<OC.MessagesResponse, Text>{
-    if (not G.isCustodian(caller, custodians)) {
-      return #err("Not authorized: " # Principal.toText(caller));
-    };
+    // if (not G.isCustodian(caller, custodians)) {
+    //   return #err("Not authorized: " # Principal.toText(caller));
+    // };
 
     await* getGroupMessagesByIndex(NNS_PROPOSAL_GROUP_ID, indexes, ?0);
   };
@@ -797,6 +856,18 @@ shared ({ caller }) actor class OCBot() = Self {
       controllers = res.settings.controllers;
     };
     #ok(canister_status)
+  };
+
+  public func getLogs(height : ?Nat) : async [LS.Log] {
+    logService.getLogs(height);
+  };
+
+  public func clearLogs(height : ?Nat) : async Result.Result<(), Text> {
+    if (not G.isCustodian(caller, custodians)) {
+      return #err("Not authorized");
+    };
+    logService.clearLogs(height);
+    #ok()
   };
 
   //Waiting for OC support

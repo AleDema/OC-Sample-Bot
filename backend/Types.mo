@@ -1,6 +1,9 @@
 import OC "./OCTypes";
 import Principal "mo:base/Principal";
+import Map "mo:map/Map";
+import TT "./TrackerTypes";
 module{
+  public type ProposalsLookup = Map.Map<Nat, {proposalData : TT.ProposalAPI; messageIndex : ?Nat32; attempts : Nat}>;
 
   public type TextPrincipal = Text;
   public type BotStatus = {
@@ -77,6 +80,20 @@ module{
       #CommunityFrozen;
       #RulesNotAccepted;
       #CommunityRulesNotAccepted;
+  };
+
+  public func topicIdToVariant(topic : Int32) : {#RVM; #SCM; #OTHER}{
+    switch(topic){
+      case(8){
+        return #SCM;
+      };
+      case(13){
+        return #RVM;
+      };
+      case(_){
+        return #OTHER;
+      }
+    }
   };
 
 }
