@@ -65,14 +65,11 @@ shared ({ caller }) actor class OCBot() = Self {
   let logService = LS.LogServiceImpl(logs, 100, true);
 
   system func postupgrade() {
-    switch(timerId){
-      case(?t){     
-        timerId := ?Timer.recurringTimer<system>(#seconds(5* 6), func() : async () {
+    if(Option.isSome(timerId)){
+      timerId := ?Timer.recurringTimer<system>(#seconds(5* 6), func() : async () {
         await updateGroup(lastProposalId);
-        });
-      };
-      case(_){}; 
-      };
+      });
+    }
   };
 
   public func initTimer<system>(_tickrateInSeconds : ?Nat) : async Result.Result<(), Text> {
