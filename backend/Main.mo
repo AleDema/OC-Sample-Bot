@@ -23,7 +23,8 @@ import OC "./OCTypes";
 import MT "./MetricTypes";
 import F "./Fixtures";
 import TT "./TrackerTypes";
-import LS "./LogService";
+import LS "./Log/LogService";
+import LT "./Log/LogTypes";
 
 shared ({ caller }) actor class OCBot() = Self {
 
@@ -63,6 +64,10 @@ shared ({ caller }) actor class OCBot() = Self {
 
   stable let logs = LS.initLogModel();
   let logService = LS.LogServiceImpl(logs, 100, true);
+
+  //////////////////////////
+  ////////////////// PROPOSAL BOT
+  //////////////////////////
 
   system func postupgrade() {
     if(Option.isSome(timerId)){
@@ -104,11 +109,11 @@ shared ({ caller }) actor class OCBot() = Self {
   };
 
   public func updateGroup(start : ?Nat) : async () {
-    logService.log(#Info, "Running update");
+    logService.addLog(#Info, "Running update", null);
     let tracker : TT.Tracker = actor ("vkqwa-eqaaa-aaaap-qhira-cai");
 
     numberOfTicksSinceUpdate := numberOfTicksSinceUpdate + 1;
-    logService.log(#Info, "Number of ticks since last update: " # Nat.toText(numberOfTicksSinceUpdate));
+    logService.addLog(#Info, "Number of ticks since last update: " # Nat.toText(numberOfTicksSinceUpdate), null);
     let res = await tracker.getProposals(GOVERNANCE_ID, start, [8, 13]);
     switch(res){
       case(#ok(data)){
@@ -121,7 +126,7 @@ shared ({ caller }) actor class OCBot() = Self {
       case(#err(e)){
         switch(e){
           case(#InvalidProposalId(d)){
-            logService.log(#Info, "InvalidProposalId, set last proposal id to: " # Nat.toText(d.end + 1));
+            logService.addLog(#Info, "InvalidProposalId, set last proposal id to: " # Nat.toText(d.end + 1), null);
             lastProposalId := ?(d.end + 1); //TODO; remove temp fix until poll service is fixed
           };
           case(_){};
@@ -148,9 +153,9 @@ shared ({ caller }) actor class OCBot() = Self {
             if(not List.some(pendingSCMList, func(p : TT.ProposalAPI) : Bool { return p.id == proposal.proposalData.id})){
               pendingSCMList := List.push(proposal.proposalData, pendingSCMList);
               numberOfTicksSinceUpdate := 0;
-              logService.log(#Info, "Pushing to list: " # Nat.toText(proposal.proposalData.id));
+              logService.addLog(#Info, "Pushing to list: " # Nat.toText(proposal.proposalData.id), null);
             } else {
-              logService.log(#Info, "Already in list" # Nat.toText(proposal.proposalData.id));
+              logService.addLog(#Info, "Already in list" # Nat.toText(proposal.proposalData.id), null);
             };
           };
 
@@ -164,7 +169,7 @@ shared ({ caller }) actor class OCBot() = Self {
     };
 
     if((List.size(pendingSCMList) > 0 and List.size(pendingSCMList) < PENDING_SCM_LIMIT and numberOfTicksSinceUpdate > MAX_TICKS_WITHOUT_UPDATE)){
-      logService.log(#Info, "Sending pending list cause wait for quiet expired");
+      logService.addLog(#Info, "Sending pending list cause wait for quiet expired", null);
       let arr = List.toArray(pendingSCMList);
       await* createBatchThread(TEST_GROUP_ID, NNS_PROPOSAL_GROUP_ID, arr, proposalsLookup);
       for (p in Array.vals(arr) ){
@@ -172,7 +177,7 @@ shared ({ caller }) actor class OCBot() = Self {
       };
       pendingSCMList := List.nil<TT.ProposalAPI>();
     } else if (List.size(pendingSCMList) > PENDING_SCM_LIMIT){
-        logService.log(#Info, "Sending pending list cause too may entries");
+        logService.addLog(#Info, "Sending pending list cause too may entries", null);
         let chunks = List.chunks(PENDING_SCM_LIMIT, pendingSCMList);
         for(chunk in List.toIter(chunks)){
           if (List.size(chunk) < PENDING_SCM_LIMIT){
@@ -188,26 +193,26 @@ shared ({ caller }) actor class OCBot() = Self {
         pendingSCMList := List.nil<TT.ProposalAPI>();
     };
 
-    logService.log(#Info, "Finished update");
+    logService.addLog(#Info, "Finished update", null);
   };
 
   func matchProposalsWithMessages(groupId : Text, pending : T.ProposalsLookup) : async* Result.Result<(), Text>{
     //map is empty, nothing to match
     if(Map.size(pending) == 0){
-      logService.log(#Info, "[matchProposalsWithMessages] Map empty");
+      logService.addLog(#Info, "[matchProposalsWithMessages] Map empty", null);
       return #ok();
     };
 
     var index = switch(await* getLatestMessageIndex(groupId)){
       case(?index){index};
       case(_){
-         logService.log(#Info, "[matchProposalsWithMessages] getLatestMessageIndex error");
+         logService.addLog(#Info, "[matchProposalsWithMessages] getLatestMessageIndex error", null);
         return #err("Error")};
     };
 
     //if the index is the same as the latest message index, nothing to match
     if(index == Option.get(latestNNSMessageIndex, index + 1)){
-      logService.log(#Info, "[matchProposalsWithMessages] up to date");
+      logService.addLog(#Info, "[matchProposalsWithMessages] up to date", null);
       return #ok();
     };
 
@@ -218,7 +223,7 @@ shared ({ caller }) actor class OCBot() = Self {
 
     //if latestNNSMessageIndex is null, get last BATCH_SIZE once
     if(Option.isNull(latestNNSMessageIndex)){
-      logService.log(#Info, "[matchProposalsWithMessages] latestNNSMessageIndex is null");
+      logService.addLog(#Info, "[matchProposalsWithMessages] latestNNSMessageIndex is null", null);
       check := false;
     };
 
@@ -227,10 +232,10 @@ shared ({ caller }) actor class OCBot() = Self {
     if (end <= Option.get(latestNNSMessageIndex, end - 1)){
       end := Option.get(latestNNSMessageIndex, Nat32.fromNat(0)) + 1;
       check := false;
-      logService.log(#Info, "[matchProposalsWithMessages] reached end");
+      logService.addLog(#Info, "[matchProposalsWithMessages] reached end", null);
     };
 
-    logService.log(#Info, "[matchProposalsWithMessages]start: " #  Nat32.toText(start) # " end: " # Nat32.toText(end));
+    logService.addLog(#Info, "[matchProposalsWithMessages]start: " #  Nat32.toText(start) # " end: " # Nat32.toText(end), null);
     //generate ranges for message indexes to fetch
     let indexVec = Iter.range(Nat32.toNat(end), Nat32.toNat(start)) |> 
                       Iter.map(_, func (n : Nat) : Nat32 {Nat32.fromNat(n)}) |> 
@@ -241,7 +246,7 @@ shared ({ caller }) actor class OCBot() = Self {
     let #ok(res) = await* getGroupMessagesByIndex(groupId, indexVec, null)
     else {
       //Error retrieving messages
-      logService.log(#Error, "Error retrieving messages");
+      logService.addLog(#Error, "Error retrieving messages", null);
       continue attempts;
     };
       
@@ -250,10 +255,10 @@ shared ({ caller }) actor class OCBot() = Self {
       let #ok(proposalData) = getNNSProposalMessageData(message)
         else {
           //This shouldn't happen unless OC changes something
-          logService.log(#Error, "error in getNNSProposalMessageData()");
+          logService.addLog(#Error, "error in getNNSProposalMessageData()", null);
           continue messages;
         };
-        //logService.log(#Info, "Test");
+        //logService.addLog(#Info, "Test");
         Map.set(tempMap, nhash, Nat64.toNat(proposalData.proposalId), proposalData.messageIndex);
     };
 
@@ -282,7 +287,7 @@ shared ({ caller }) actor class OCBot() = Self {
   };
 
   func createProposalThread(targetGroupId : Text, votingGroupId : Text, proposal : TT.ProposalAPI, messageIndex : ?Nat32) : async* (){
-    //logService.log(#Info, "[createProposalThread] Creating proposal thread: " # Nat.toText(proposal.id) # " messageIndex: " # Nat32.toText(Option.get(messageIndex, Nat32.fromNat(0))));
+    //logService.addLog(#Info, "[createProposalThread] Creating proposal thread: " # Nat.toText(proposal.id) # " messageIndex: " # Nat32.toText(Option.get(messageIndex, Nat32.fromNat(0))));
     let text = TU.formatProposal(proposal);
     let res = await* sendTextMessageToGroup(targetGroupId, text, null);
     switch(res){
@@ -352,13 +357,17 @@ shared ({ caller }) actor class OCBot() = Self {
     let #ok(res) = await* getGroupMessagesByIndex(NNS_PROPOSAL_GROUP_ID, indexVec, null)
     else {
       //Error retrieving messages
-      logService.log(#Error, "[testRange] Error retrieving messages");
+      logService.addLog(#Error, "[testRange] Error retrieving messages", null);
       return #err();
     };
 
     #ok((res.messages, indexVec))
   };
 
+
+  //////////////////////////
+  ////////////////// OC API
+  //////////////////////////
 
   public shared({caller}) func initBot<system>(name : Text, displayName : ?Text) : async Result.Result<Text, Text>{
     if (not G.isCustodian(caller, custodians)) {
@@ -724,8 +733,9 @@ shared ({ caller }) actor class OCBot() = Self {
     return #ok("Tallies updated 1");
   };
 
-  //TEST ENDPOINTS
-
+  //////////////////////////
+  ////////////////// TEST ENDPOINTS
+  //////////////////////////
   public shared({caller}) func test() : async Result.Result<Text, Text>{
     let mock = F.basicMockData();
     return await updateTallies(mock);
@@ -819,7 +829,9 @@ shared ({ caller }) actor class OCBot() = Self {
     return #ok(index)
   };
 
-  // ADMIN //
+  //////////////////////////
+  ////////////////// ADMIN
+  //////////////////////////
   public shared ({ caller }) func addCustodian(new_custodian : Principal) : async Result.Result<Text, Text> {
     if (not G.isCustodian(caller, custodians)) {
       return #err("Not authorized");
@@ -830,7 +842,10 @@ shared ({ caller }) actor class OCBot() = Self {
     return #ok("Custodian Added");
   };
 
-  //METRICS
+  
+  //////////////////////////
+  ////////////////// METRICS
+  //////////////////////////
   public shared({caller}) func getCanisterStatus() : async Result.Result<MT.CanisterStatus, Text> {
     if (not G.isCustodian(caller, custodians)) {
       return #err("Not authorized");
@@ -849,15 +864,18 @@ shared ({ caller }) actor class OCBot() = Self {
     #ok(canister_status)
   };
 
-  public func getLogs(height : ?Nat) : async [LS.Log] {
-    logService.getLogs(height);
+  //////////////////////////
+  ////////////////// LOGS
+  //////////////////////////
+  public func getLogs(filter : ?LT.LogFilter) : async [LT.Log] {
+    logService.getLogs(filter);
   };
 
-  public func clearLogs(height : ?Nat) : async Result.Result<(), Text> {
+  public func clearLogs() : async Result.Result<(), Text> {
     if (not G.isCustodian(caller, custodians)) {
       return #err("Not authorized");
     };
-    logService.clearLogs(height);
+    logService.clearLogs();
     #ok()
   };
 
