@@ -103,31 +103,6 @@ shared ({ caller }) actor class OCBot() = Self {
     }
   };
 
-  public func testSetLastProposalId(proposalId : Nat) : async () {
-    lastProposalId := ?proposalId;
-  };
-
-  public func testGetLastProposalId() : async ?Nat {
-    lastProposalId
-  };
-
-  public func getPendignList() : async ([TT.ProposalAPI], Nat, Nat){
-    (List.toArray(pendingSCMList), numberOfTicksSinceUpdate, List.size(pendingSCMList))
-  };
-
-  public func clearPendingList() : async (){
-    pendingSCMList := List.nil<TT.ProposalAPI>();
-  };
-
-  public func getProposalsLookup() : async [(Nat, {proposalData : TT.ProposalAPI; messageIndex : ?Nat32; attempts : Nat})] {
-    Map.toArray(proposalsLookup);
-  };
-
-  public func clearProposalsLookup() : async (){
-    Map.clear(proposalsLookup);
-  };
-  
-
   public func updateGroup(start : ?Nat) : async () {
     logService.log(#Info, "Running update");
     let tracker : TT.Tracker = actor ("vkqwa-eqaaa-aaaap-qhira-cai");
@@ -170,10 +145,13 @@ shared ({ caller }) actor class OCBot() = Self {
               Map.delete(proposalsLookup, nhash, proposal.proposalData.id);
             };
           } else {
+            if(not List.some(pendingSCMList, func(p : TT.ProposalAPI) : Bool { return p.id == proposal.proposalData.id})){
               pendingSCMList := List.push(proposal.proposalData, pendingSCMList);
-              //lastSCMListUpdate := ?Time.now();
               numberOfTicksSinceUpdate := 0;
-              logService.log(#Info, "Pushing to list");
+              logService.log(#Info, "Pushing to list: " # Nat.toText(proposal.proposalData.id));
+            } else {
+              logService.log(#Info, "Already in list" # Nat.toText(proposal.proposalData.id));
+            };
           };
 
         };
@@ -238,49 +216,49 @@ shared ({ caller }) actor class OCBot() = Self {
     var check = true;
     label attempts while (check){
 
-      //if latestNNSMessageIndex is null, get last BATCH_SIZE once
-      if(Option.isNull(latestNNSMessageIndex)){
-        logService.log(#Info, "[matchProposalsWithMessages] latestNNSMessageIndex is null");
-        check := false;
-      };
+    //if latestNNSMessageIndex is null, get last BATCH_SIZE once
+    if(Option.isNull(latestNNSMessageIndex)){
+      logService.log(#Info, "[matchProposalsWithMessages] latestNNSMessageIndex is null");
+      check := false;
+    };
 
 
-      var end = start - FIND_PROPOSALS_BATCH_SIZE;
-      if (end <= Option.get(latestNNSMessageIndex, end - 1)){
-        end := Option.get(latestNNSMessageIndex, Nat32.fromNat(0)) + 1;
-        check := false;
-        logService.log(#Info, "[matchProposalsWithMessages] reached end");
-      };
+    var end = start - FIND_PROPOSALS_BATCH_SIZE;
+    if (end <= Option.get(latestNNSMessageIndex, end - 1)){
+      end := Option.get(latestNNSMessageIndex, Nat32.fromNat(0)) + 1;
+      check := false;
+      logService.log(#Info, "[matchProposalsWithMessages] reached end");
+    };
 
-      logService.log(#Info, "[matchProposalsWithMessages]start: " #  Nat32.toText(start) # " end: " # Nat32.toText(end));
-      //generate ranges for message indexes to fetch
-      let indexVec = Iter.range(Nat32.toNat(end), Nat32.toNat(start)) |> 
-                        Iter.map(_, func (n : Nat) : Nat32 {Nat32.fromNat(n)}) |> 
-                          Iter.toArray(_);
-    
-      start := end;
+    logService.log(#Info, "[matchProposalsWithMessages]start: " #  Nat32.toText(start) # " end: " # Nat32.toText(end));
+    //generate ranges for message indexes to fetch
+    let indexVec = Iter.range(Nat32.toNat(end), Nat32.toNat(start)) |> 
+                      Iter.map(_, func (n : Nat) : Nat32 {Nat32.fromNat(n)}) |> 
+                        Iter.toArray(_);
+  
+    start := end;
 
-      let #ok(res) = await* getGroupMessagesByIndex(groupId, indexVec, null)
-      else {
-        //Error retrieving messages
-        logService.log(#Error, "Error retrieving messages");
-        continue attempts;
-      };
+    let #ok(res) = await* getGroupMessagesByIndex(groupId, indexVec, null)
+    else {
+      //Error retrieving messages
+      logService.log(#Error, "Error retrieving messages");
+      continue attempts;
+    };
       
-      let tempMap = Map.new<Nat, OC.MessageIndex>();
-      label messages for (message in Array.vals(res.messages)){ 
-        let #ok(proposalData) = getNNSProposalMessageData(message)
-          else {
-            //This shouldn't happen unless OC changes something
-            logService.log(#Error, "error in getNNSProposalMessageData()");
-            continue messages;
-          };
-          //logService.log(#Info, "Test");
-          Map.set(tempMap, nhash, Nat64.toNat(proposalData.proposalId), proposalData.messageIndex);
-      };
+    let tempMap = Map.new<Nat, OC.MessageIndex>();
+    label messages for (message in Array.vals(res.messages)){ 
+      let #ok(proposalData) = getNNSProposalMessageData(message)
+        else {
+          //This shouldn't happen unless OC changes something
+          logService.log(#Error, "error in getNNSProposalMessageData()");
+          continue messages;
+        };
+        //logService.log(#Info, "Test");
+        Map.set(tempMap, nhash, Nat64.toNat(proposalData.proposalId), proposalData.messageIndex);
+    };
 
-      var f = true;
-      label process for ((k,v) in Map.entries(pending)){
+    var f = true;
+    label process for ((k,v) in Map.entries(pending)){
         if (Option.isNull(v.messageIndex)){
           f := false;
         };
@@ -301,30 +279,6 @@ shared ({ caller }) actor class OCBot() = Self {
 
     latestNNSMessageIndex := ?index;
     #ok();
-  };
-
-  public func testRange(start: Int, end: Nat) : async Result.Result<([OC.MessageEventWrapper], [Nat32]), ()>{
-    let indexVec = Iter.range(end, start) |> 
-                      Iter.map(_, func (n : Nat) : Nat32 {Nat32.fromNat(n)}) |> 
-                        Iter.toArray(_);
-
-    let #ok(res) = await* getGroupMessagesByIndex(NNS_PROPOSAL_GROUP_ID, indexVec, null)
-    else {
-      //Error retrieving messages
-      logService.log(#Error, "[testRange] Error retrieving messages");
-      return #err();
-    };
-
-    #ok((res.messages, indexVec))
-
-  };
-
-  public func getLatestNNSMessageIndex() : async?Nat32{
-    latestNNSMessageIndex;
-  };
-
-  public func setLatestNNSMessageIndex(index :?Nat32) : async (){
-    latestNNSMessageIndex := index;
   };
 
   func createProposalThread(targetGroupId : Text, votingGroupId : Text, proposal : TT.ProposalAPI, messageIndex : ?Nat32) : async* (){
@@ -351,6 +305,60 @@ shared ({ caller }) actor class OCBot() = Self {
       case(_){};
     }
   };
+
+  public func testSetLastProposalId(proposalId : Nat) : async () {
+    lastProposalId := ?proposalId;
+  };
+
+  public func testGetLastProposalId() : async ?Nat {
+    lastProposalId
+  };
+
+  public func testGetPendingList() : async ([TT.ProposalAPI], Nat, Nat){
+    (List.toArray(pendingSCMList), numberOfTicksSinceUpdate, List.size(pendingSCMList))
+  };
+
+  public func testClearPendingList() : async (){
+    pendingSCMList := List.nil<TT.ProposalAPI>();
+  };
+
+  public func testGetProposalsLookup() : async [(Nat, {proposalData : TT.ProposalAPI; messageIndex : ?Nat32; attempts : Nat})] {
+    Map.toArray(proposalsLookup);
+  };
+
+  public func testClearProposalsLookup() : async (){
+    Map.clear(proposalsLookup);
+  };
+
+  public func testGetLatestNNSMessageIndex() : async?Nat32{
+    latestNNSMessageIndex;
+  };
+
+  public func testSetLatestNNSMessageIndex(index :?Nat32) : async (){
+    latestNNSMessageIndex := index;
+  };
+
+  public func testResetState() : async (){
+    pendingSCMList := List.nil<TT.ProposalAPI>();
+    Map.clear(proposalsLookup);
+    latestNNSMessageIndex := null;
+  };
+
+  public func testRange(start: Int, end: Nat) : async Result.Result<([OC.MessageEventWrapper], [Nat32]), ()>{
+    let indexVec = Iter.range(end, start) |> 
+                      Iter.map(_, func (n : Nat) : Nat32 {Nat32.fromNat(n)}) |> 
+                        Iter.toArray(_);
+
+    let #ok(res) = await* getGroupMessagesByIndex(NNS_PROPOSAL_GROUP_ID, indexVec, null)
+    else {
+      //Error retrieving messages
+      logService.log(#Error, "[testRange] Error retrieving messages");
+      return #err();
+    };
+
+    #ok((res.messages, indexVec))
+  };
+
 
   public shared({caller}) func initBot<system>(name : Text, displayName : ?Text) : async Result.Result<Text, Text>{
     if (not G.isCustodian(caller, custodians)) {
