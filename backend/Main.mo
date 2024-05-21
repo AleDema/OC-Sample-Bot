@@ -64,8 +64,6 @@ shared ({ caller }) actor class OCBot() = Self {
   stable let logs = LS.initLogModel();
   let logService = LS.LogServiceImpl(logs, 100, true);
 
-  stable var breakDebug = false;
-
   public func initTimer<system>(_tickrateInSeconds : ?Nat) : async Result.Result<(), Text> {
             
     let tickrate : Nat = Option.get(_tickrateInSeconds, 5* 60); // 1 minutes
@@ -105,18 +103,6 @@ shared ({ caller }) actor class OCBot() = Self {
     lastProposalId
   };
 
-  public func testBreak() : async () {
-    breakDebug:= true;
-  };
-
-  func checkBreak() : Bool {
-    if (breakDebug){
-      breakDebug:= false;
-      return true
-    };
-    return false;
-  };
-
   public func getPendignList() : async ([TT.ProposalAPI], Nat, Nat){
     (List.toArray(pendingSCMList), numberOfTicksSinceUpdate, List.size(pendingSCMList))
   };
@@ -154,7 +140,6 @@ shared ({ caller }) actor class OCBot() = Self {
           case(#InvalidProposalId(d)){
             logService.log(#Info, "InvalidProposalId, set last proposal id to: " # Nat.toText(d.end + 1));
             lastProposalId := ?(d.end + 1); //TODO; remove temp fix until poll service is fixed
-            //await updateGroup();
           };
           case(_){};
         };
@@ -162,39 +147,35 @@ shared ({ caller }) actor class OCBot() = Self {
     };
 
     for(proposal in Map.vals(proposalsLookup)){
-        //TODO: remove, needed to stop when testing
-        if (checkBreak()){
-          return;
-        };
 
-        switch(T.topicIdToVariant(proposal.proposalData.topicId)){
-          case(#RVM){
+      switch(T.topicIdToVariant(proposal.proposalData.topicId)){
+        case(#RVM){
+          if(Option.isSome(proposal.messageIndex) or proposal.attempts > 3){
+            await* createProposalThread(TEST_GROUP_ID, NNS_PROPOSAL_GROUP_ID, proposal.proposalData, proposal.messageIndex);
+            Map.delete(proposalsLookup, nhash, proposal.proposalData.id);
+          }
+        };
+        case(#SCM){
+          if(TU.isSeparateBuildProcess(proposal.proposalData.title)){
             if(Option.isSome(proposal.messageIndex) or proposal.attempts > 3){
               await* createProposalThread(TEST_GROUP_ID, NNS_PROPOSAL_GROUP_ID, proposal.proposalData, proposal.messageIndex);
               Map.delete(proposalsLookup, nhash, proposal.proposalData.id);
-            }
-          };
-          case(#SCM){
-            if(TU.isSeparateBuildProcess(proposal.proposalData.title)){
-              if(Option.isSome(proposal.messageIndex) or proposal.attempts > 3){
-                await* createProposalThread(TEST_GROUP_ID, NNS_PROPOSAL_GROUP_ID, proposal.proposalData, proposal.messageIndex);
-                Map.delete(proposalsLookup, nhash, proposal.proposalData.id);
-              };
-            } else {
-                pendingSCMList := List.push(proposal.proposalData, pendingSCMList);
-                //lastSCMListUpdate := ?Time.now();
-                numberOfTicksSinceUpdate := 0;
-                logService.log(#Info, "Pushing to list");
             };
-
+          } else {
+              pendingSCMList := List.push(proposal.proposalData, pendingSCMList);
+              //lastSCMListUpdate := ?Time.now();
+              numberOfTicksSinceUpdate := 0;
+              logService.log(#Info, "Pushing to list");
           };
-          case(_){};
-        };
 
-        if(proposal.proposalData.id > Option.get(lastProposalId, 0)){
-          lastProposalId := ?(proposal.proposalData.id + 1); //TODO; remove temp fix until poll service is fixed
         };
+        case(_){};
       };
+
+      if(proposal.proposalData.id > Option.get(lastProposalId, 0)){
+        lastProposalId := ?(proposal.proposalData.id + 1); //TODO; remove temp fix until poll service is fixed
+      };
+    };
 
     if((List.size(pendingSCMList) > 0 and List.size(pendingSCMList) < PENDING_SCM_LIMIT and numberOfTicksSinceUpdate > MAX_TICKS_WITHOUT_UPDATE)){
       logService.log(#Info, "Sending pending list cause wait for quiet expired");
@@ -224,7 +205,6 @@ shared ({ caller }) actor class OCBot() = Self {
     logService.log(#Info, "Finished update");
   };
 
-  var tempMap = Map.new<Nat, OC.MessageIndex>();
   func matchProposalsWithMessages(groupId : Text, pending : T.ProposalsLookup) : async* Result.Result<(), Text>{
     //map is empty, nothing to match
     if(Map.size(pending) == 0){
@@ -279,7 +259,7 @@ shared ({ caller }) actor class OCBot() = Self {
         continue attempts;
       };
       
-      tempMap := Map.new<Nat, OC.MessageIndex>();
+      let tempMap = Map.new<Nat, OC.MessageIndex>();
       label messages for (message in Array.vals(res.messages)){ 
         let #ok(proposalData) = getNNSProposalMessageData(message)
           else {
@@ -311,8 +291,7 @@ shared ({ caller }) actor class OCBot() = Self {
       };
     };  
 
-    //todo: reenable
-    //latestNNSMessageIndex := ?index;
+    latestNNSMessageIndex := ?index;
     #ok();
   };
 
@@ -338,10 +317,6 @@ shared ({ caller }) actor class OCBot() = Self {
 
   public func setLatestNNSMessageIndex(index :?Nat32) : async (){
     latestNNSMessageIndex := index;
-  };
-
-  public func getTempMap() : async [(Nat, OC.MessageIndex)]{
-    Map.toArray(tempMap);
   };
 
   func createProposalThread(targetGroupId : Text, votingGroupId : Text, proposal : TT.ProposalAPI, messageIndex : ?Nat32) : async* (){
