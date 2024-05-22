@@ -98,7 +98,7 @@ module{
                     switch(e){
                         case(#InvalidProposalId(d)){
                             logService.addLog(#Info, "InvalidProposalId, set last proposal id to: " # Nat.toText(d.end + 1), null);
-                            model.lastProposalId := ?(d.end + 1); //TODO; remove temp fix until poll service is fixed
+                            model.lastProposalId := ?(d.end); //TODO; remove temp fix until poll service is fixed
                         };
                         case(_){};
                     };
@@ -135,7 +135,7 @@ module{
             };
 
                 if(proposal.proposalData.id > Option.get(model.lastProposalId, 0)){
-                    model.lastProposalId := ?(proposal.proposalData.id + 1); //TODO; remove temp fix until poll service is fixed
+                    model.lastProposalId := ?(proposal.proposalData.id); //TODO; remove temp fix until poll service is fixed
                 };
             };
 
