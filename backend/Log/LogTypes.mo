@@ -126,8 +126,11 @@ module {
             case((_, _)){};
         };
         
-
-        return true;
+        if(matchAll){
+            return true;
+        } else {
+            return false;
+        }
         
     };
 
