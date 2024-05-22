@@ -83,7 +83,7 @@ shared ({ caller }) actor class OCBot() = Self {
     };
 
     timerId := ?Timer.recurringTimer<system>(#seconds(tickrate), func() : async () {
-      await updateGroup(lastProposalId);
+      await update(lastProposalId);
     });
 
     return #ok()
