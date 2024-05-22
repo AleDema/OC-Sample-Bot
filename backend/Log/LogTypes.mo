@@ -20,12 +20,12 @@ module {
     };
 
     public type LogService = {
-        addLog : (log : Log) -> ();
-        logError : (message : Text) -> ();
-        logWarn : (message : Text) -> ();
-        logInfo : (message : Text) -> ();
-        getLogs(height : ?Nat) : [Log];
-        clearLogs(height : ?Nat) : ();
+        addLog : (level : LogLevel, message : Text, context : ?Text) -> ();
+        logError : (message : Text, context : ?Text) -> ();
+        logWarn : (message : Text, context : ?Text) -> ();
+        logInfo : (message : Text, context : ?Text) -> ();
+        getLogs : (?LogFilter) -> [Log];
+        clearLogs() : ();
     };
 
     public type Log ={
