@@ -54,17 +54,6 @@ module {
 
         public func clearLogs() : () {
             logModel.logs := List.nil<LT.Log>();
-            // switch(height){
-            //     case(?h){
-            //         if (List.size(logModel.logs) < h) {
-            //             logModel.logs := List.nil<LT.Log>();
-            //         };
-            //        logModel.logs := List.filter(logModel.logs, func (x : LT.Log) : Bool {x.0 >= h});
-            //     };
-            //     case(_){
-            //         logModel.logs := List.nil<LT.Log>();
-            //     }
-            // }
         }
     };
 }

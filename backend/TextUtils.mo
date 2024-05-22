@@ -19,8 +19,9 @@ module {
     text := text # "Title: " # proposal.title # "\n";
     text := text # "Topic: " # proposalTopicToText(T.topicIdToVariant(proposal.topicId)) # "\n";
     //add type
-    let date = DateTime.DateTime(Int64.toInt(Int64.fromNat64(proposal.proposalTimestampSeconds)));
-    text := text # "Date Created: " # DateTime.toText(date) # "\n";
+    let fmt = "YYYY-MM-DD HH:mm";
+    let date = DateTime.DateTime(Int64.toInt(Int64.fromNat64(proposal.proposalTimestampSeconds * 1_000_000_000))); //secs to nano
+    text := text # "Date Created: " # DateTime.toTextAdvanced(date, #custom({format = fmt; locale = null})) # "\n";
     text := text # "Proposer: " # Nat64.toText(proposal.proposer) # "\n";
     text
   };

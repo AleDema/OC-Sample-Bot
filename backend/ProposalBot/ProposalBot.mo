@@ -85,14 +85,20 @@ module{
 
             model.numberOfTicksSinceUpdate := model.numberOfTicksSinceUpdate + 1;
             logService.addLog(#Info, "Number of ticks since last update: " # Nat.toText(model.numberOfTicksSinceUpdate), null);
+            
             let res = await tracker.getProposals(GOVERNANCE_ID, start, [8, 13]);
             switch(res){
                 case(#ok(data)){
-                    for(proposal in Array.vals(data)){
-                        Map.set(model.proposalsLookup, nhash, proposal.id, { proposalData = proposal; messageIndex = null; attempts = 0});
-                    };
+                    switch(data){
+                        case(#Success(d) or #LimitReached(d)){
+                            //for now we will just ignore the limit reached case, it will just take longer to sync all proposals
+                            for(proposal in Array.vals(d)){
+                                Map.set(model.proposalsLookup, nhash, proposal.id, { proposalData = proposal; messageIndex = null; attempts = 0});
+                            };
 
-                    ignore await* matchProposalsWithMessages(NNS_PROPOSAL_GROUP_ID, model.proposalsLookup);
+                            ignore await* matchProposalsWithMessages(NNS_PROPOSAL_GROUP_ID, model.proposalsLookup);
+                        }
+                    }
                 };
                 case(#err(e)){
                     switch(e){

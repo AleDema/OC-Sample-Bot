@@ -51,13 +51,6 @@ module {
         };
     };
 
-    // func processCondition(condition : Bool, matchAll : Bool) : Result.Result<Bool, ()> {
-    //     if(condition ){
-
-    //     }
-    // };
-
-
     public func matchLogFilter(_filter : ?LogFilter, log : Log) : Bool {
         let #ok(filter) = optToRes<LogFilter>(_filter)
         else {

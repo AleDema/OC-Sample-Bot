@@ -15,6 +15,7 @@ import Int "mo:base/Int";
 import Array "mo:base/Array";
 import Timer "mo:base/Timer";
 import Int32 "mo:base/Int32";
+import Int64 "mo:base/Int64";
 import Map "mo:map/Map";
 import T "./Types";
 import TU "./TextUtils";
@@ -30,6 +31,7 @@ import BT "./OC/BotTypes";
 import BS "./OC/BotService";
 import OCS "./OC/OCService";
 import PB "./ProposalBot/ProposalBot";
+import DateTime "mo:datetime/DateTime";
 shared ({ caller }) actor class OCBot() = Self {
 
   let NNS_PROPOSAL_GROUP_ID = "labxu-baaaa-aaaaf-anb4q-cai";
@@ -78,6 +80,12 @@ shared ({ caller }) actor class OCBot() = Self {
   //////////////////////////
   ////////////////// TEST ENDPOINTS
   //////////////////////////
+
+  public func testDate(secs : Int) : async Text{
+    let fmt = "YYYY-MM-DD HH:mm";
+    let date = DateTime.DateTime(secs * 1_000_000_000); //secs to nano
+    DateTime.toTextAdvanced(date, #custom({format = fmt; locale = null}))
+  };
 
 
   //////////////////PROPOSAL BOT

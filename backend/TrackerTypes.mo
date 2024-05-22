@@ -1,10 +1,18 @@
 module {
-  public type GetProposalError = {
-    #InvalidTopic;
-    #CanisterNotTracked;
-    #InternalError;
-    #InvalidProposalId : { end : ProposalId; start : ProposalId };
-  };
+    public type GetProposalResponse = {
+        #Success : [ProposalAPI];
+        #LimitReached : [ProposalAPI]
+    };
+
+    public type GetProposalError = {
+        #InvalidProposalId : {
+            start : ProposalId;
+            end : ProposalId;
+        };
+        #InternalError;
+        #CanisterNotTracked;
+        #InvalidTopic;
+    };
   public type ProposalAPI = {
       id : ProposalId;
       topicId : Int32;
@@ -22,7 +30,7 @@ module {
     #Pending;
   };
   public type Result = { #ok; #err : Text };
-  public type Result_1 = { #ok : [ProposalAPI]; #err : GetProposalError };
+  public type Result_1 = { #ok : GetProposalResponse; #err : GetProposalError };
   public type Tracker = actor {
     getProposals : shared (Text, ?ProposalId, [Int32]) -> async Result_1;
     start : shared () -> async Result;
