@@ -31,6 +31,8 @@ import {  nhash; n64hash; n32hash; thash } "mo:map/Map";
 
   //TODOs:
   // set avatar
+  // check init status
+  // check group membership
 module {
 
   public func initModel() : BT.BotModel {
@@ -44,14 +46,14 @@ module {
   };
 
   let USER_INDEX_CANISTER = "4bkt6-4aaaa-aaaaf-aaaiq-cai";
-  let LOCAL_USER_INDEX_ID = "nq4qv-wqaaa-aaaaf-bhdgq-cai";
-  let GROUP_INDEX_ID = "4ijyc-kiaaa-aaaaf-aaaja-cai";
-  let NNS_PROPOSAL_GROUP_ID = "labxu-baaaa-aaaaf-anb4q-cai";
+  //let LOCAL_USER_INDEX_ID = "nq4qv-wqaaa-aaaaf-bhdgq-cai";
+  //let GROUP_INDEX_ID = "4ijyc-kiaaa-aaaaf-aaaja-cai";
+  //let NNS_PROPOSAL_GROUP_ID = "labxu-baaaa-aaaaf-anb4q-cai";
   let TEST_GROUP_ID = "evg6t-laaaa-aaaar-a4j5q-cai";
-  let GOVERNANCE_ID = "rrkah-fqaaa-aaaaa-aaaaq-cai";
+  //let GOVERNANCE_ID = "rrkah-fqaaa-aaaaa-aaaaq-cai";
   let BOT_REGISTRATION_FEE: Nat = 10_000_000_000_000; // 10T
 
-  public class BotService(botModel : BT.BotModel, ocService : OC.OCService, logService : LT.LogService) = {
+  public class BotServiceImpl(botModel : BT.BotModel, ocService : OC.OCService, logService : LT.LogService) = {
     public func initBot<system>(name : Text, _displayName : ?Text) : async Result.Result<Text, Text>{
       switch(botModel.botStatus){
         case(#NotInitialized){
@@ -92,6 +94,15 @@ module {
           return #err("Initialized")
         }
       }
+    };
+
+
+    public func getBotStatus() : BT.BotStatus {
+      botModel.botStatus
+    };
+
+    public func setBotStatus() {
+      botModel.botStatus := #Initialized;
     };
 
     public func joinGroup(groupCanisterId : Text, inviteCode : ?Nat64) : async* Result.Result<Text, Text>{
@@ -335,3 +346,168 @@ module {
   //     res
   // };
 };  
+
+
+
+
+  // let messageRange : Nat32 = 10;
+  // // Attempt to send messages for new proposals and register the corresponding message ID in the associative map.
+  // // To keep payload size at a minimum it retrieves 10 messages at a time for a max of maxRetries.
+  // func trySendMessages( tallies : [T.TallyData]) : async* Result.Result<Text, Text> {
+
+  //   var index = switch(await* getLatestMessageIndex(NNS_PROPOSAL_GROUP_ID)){
+  //     case(?index){index};
+  //     case(_){return #err("Error")};
+  //   };
+
+  //   var _tallies = tallies;
+
+  //   //TODO: consider compromising cross canister calls with increased payload size
+  //   var maxRetries = 3;
+  //   label attempts while (maxRetries > 0){
+  //     maxRetries := maxRetries - 1;
+
+  //     //generate ranges for message indexes to fetch
+  //     let indexVec = Iter.range(Nat32.toNat(index) - Nat32.toNat(messageRange) , Nat32.toNat(index)) |> 
+  //                       Iter.map(_, func (n : Nat) : Nat32 {Nat32.fromNat(n)}) |> 
+  //                         Iter.toArray(_);
+    
+
+  //     let #ok(res) = await* getGroupMessagesByIndex(NNS_PROPOSAL_GROUP_ID, indexVec, null)
+  //     else {
+  //       //Error retrieving messages
+  //       continue attempts;
+  //     };
+
+  //     label messages for (message in res.messages.vals()){ 
+  //       let #ok(proposalData) = getNNSProposalMessageData(message)
+  //       else {
+  //          //This shouldn't happen unless OC changes something
+  //          //TODO: log
+  //          continue messages;
+  //       };
+  //       let exists = Array.find<T.TallyData>(_tallies, func (t : T.TallyData) : Bool {
+  //         return proposalData.proposalId == t.proposalId;
+  //       });
+
+
+  //       let tally = switch(exists){
+  //         case(?t){t};
+  //         case(_){
+  //           continue messages;
+  //         };
+  //       };
+
+  //       var group_id = NNS_PROPOSAL_GROUP_ID;
+  //       if (TEST_MODE){group_id := TEST_GROUP_ID};
+
+  //       var messageIndex = ?proposalData.messageIndex;
+
+  //       if(TEST_MODE){messageIndex := null};
+
+  //       let res = await* sendTextMessageToGroup(group_id, TU.formatMessage(tally), messageIndex);
+
+  //       switch (res){
+  //         case(#Success(msgData)){
+  //           //remove from tallies
+  //           _tallies := Array.filter(_tallies, func(n : T.TallyData) : Bool {
+  //             return n.proposalId != tally.proposalId;
+  //           });
+
+  //           //handle edge case where a proposal is settled on the first send, it won;t be updated so there is no need to add to the map
+  //           switch(tally.proposalStatus){
+  //             case(#Pending){
+  //               //Dont save to hashmap in testmode for now
+  //               if(not TEST_MODE){
+  //                 Map.set(activeProposals, n64hash, proposalData.proposalId, msgData.message_id);
+  //               }
+  //             };
+  //             case(_){};
+  //           }
+  //         };
+  //         case(_){ //TODO: log error
+  //         };
+  //       };
+  //     };
+
+  //     index := index - messageRange;
+  //     //return early if all tallies are matched
+  //     if ((Array.size(_tallies) == 0)){
+  //       return #ok("Tallies updated 2");
+  //     };
+  //   };
+
+  //   var notFound = "";
+  //   for(i in _tallies.vals()){
+  //     notFound := notFound # Nat64.toText(i.proposalId) # " ";
+  //   };
+
+  //   //TODO: log unmatched proposal ids
+  //    return #err("Max retries reached: Proposals not found: " # notFound);
+  // };
+
+
+  //TODO: remove
+  //////////////////////////
+  ////////////////// TALLIES
+  //////////////////////////
+
+  // public shared({caller}) func updateTallies(tallies : [T.TallyData]) : async Result.Result<Text, Text>{
+  //   if (not G.isCustodian(caller, custodians)) {
+  //     return #err("Not authorized: " # Principal.toText(caller));
+  //   };
+
+  //   var _tallies = tallies;
+  //   label it for (tally in tallies.vals()){
+  //     let p = switch(Map.get(activeProposals, n64hash, tally.proposalId)){
+  //       case(?p){p};
+  //       case(_){ continue it; };
+  //     };
+  //     // edit message
+  //     let res = await* editTextGroupMessage(NNS_PROPOSAL_GROUP_ID, p, TU.formatMessage(tally));
+  //     //TODO: log edit errors
+  //     // if proposal is over, remove from map
+  //     switch (tally.tallyStatus, tally.proposalStatus){
+  //       //TODO: reconsider after polling canister design
+  //       case((#Approved or #Rejected), #Executed(verdict)){
+  //         Map.delete(activeProposals, n64hash, tally.proposalId);
+  //       };
+  //       case(_){};
+  //     };
+
+  //     // Remove updated tallies
+  //     _tallies := Array.filter(_tallies, func(n : T.TallyData) : Bool {
+  //       return n.proposalId != tally.proposalId;
+  //     });
+  //   };
+
+  //   //at least one proposal is new
+  //   if (Array.size(_tallies) > 0){
+  //     return await* trySendMessages(_tallies);
+  //   };
+  //   return #ok("Tallies updated 1");
+  // };
+
+
+  // public shared({caller}) func test() : async Result.Result<Text, Text>{
+  //   let mock = F.basicMockData();
+  //   return await updateTallies(mock);
+  // };
+
+  // public shared({caller}) func test2() : async Result.Result<Text, Text>{
+  //   let mock = F.wrongMockData();
+  //   return await updateTallies(mock);
+  // };
+
+  // public shared({caller}) func testGetNeuron(id : Nat64) : async GT.ListNeuronsResponse{
+  //   let gs = GS.GovernanceService(GOVERNANCE_ID);
+  //   return await* gs.listNeurons({
+  //               neuron_ids = [id];
+  //               include_neurons_readable_by_caller = false;
+  //           });
+  // };
+
+  // public shared({caller}) func testGetNeuronVote(id : Nat64, proposalId : OC.ProposalId) : async ({#Approved; #Rejected; #Unspecified}, Nat64, Nat64){
+  //   let gs = GS.GovernanceService(GOVERNANCE_ID);
+  //   return await* gs.getVoteStatus(id, proposalId);
+  // };
