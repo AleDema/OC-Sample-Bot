@@ -19,7 +19,7 @@ module {
         var botStatus : BotStatus;
         var botName : ?Text;
         var botDisplayName : ?Text;
-        var lastMessageId : Nat;
+        //var lastMessageId : Nat;
     };
 
 

@@ -28,6 +28,7 @@ import LS "../Log/LogService";
 import LT "../Log/LogTypes";
 import BT "./BotTypes";
 import {  nhash; n64hash; n32hash; thash } "mo:map/Map";
+import Prng "mo:prng";
 
   //TODOs:
   // set avatar
@@ -41,7 +42,7 @@ module {
       var botName = null;
       var botDisplayName = null;
       groups = Map.new<Text, ()>();
-      var lastMessageId = 0;
+      //var lastMessageId = 0;
     }
   };
 
@@ -134,56 +135,61 @@ module {
     };
 
     public func sendGroupMessage(groupCanisterId : Text, content : OCApi.MessageContentInitial, threadIndexId : ?Nat32) : async* Result.Result<T.SendMessageResponse, Text>{
-      botModel.lastMessageId := botModel.lastMessageId + 1;
-      let id = botModel.lastMessageId;
-      let #ok(res) = await* ocService.sendGroupMessage(groupCanisterId, Option.get(botModel.botName, ""), botModel.botDisplayName, content, botModel.lastMessageId, threadIndexId)
-      else{
-        return #err("Trapped");
-      };
-
+      let seed : Nat64 = Nat64.fromIntWrap(Time.now());
+      let rng = Prng.Seiran128();
+      rng.init(seed);
+      let id = Nat64.toNat(rng.next());
+      let res = await* ocService.sendGroupMessage(groupCanisterId, Option.get(botModel.botName, ""), botModel.botDisplayName, content, id, threadIndexId);
       switch(res){
-        case(#Success(response)){
-          #ok(#Success({ response with message_id = id;}))
+        case(#ok(data)){
+          switch(data){
+            case(#Success(response)){
+              #ok(#Success({ response with message_id = id;}))
+            };
+            case(#ChannelNotFound){
+              #ok(#ChannelNotFound)
+            };
+            case(#ThreadMessageNotFound){
+              #ok(#ThreadMessageNotFound)
+            };
+            case(#MessageEmpty){
+              #ok(#MessageEmpty)
+            };
+            case(#TextTooLong(n)){
+              #ok(#TextTooLong(n))
+            };
+            case(#InvalidPoll(reason)){
+              #ok(#InvalidPoll(reason) )
+            };
+            case(#NotAuthorized){
+              #ok(#NotAuthorized)
+            };
+            case(#UserNotInCommunity){
+              #ok(#UserNotInCommunity)
+            };
+            case(#UserNotInChannel){
+              #ok(#UserNotInChannel)
+            };
+            case(#UserSuspended){
+              #ok(#UserSuspended)
+            };
+            case(#InvalidRequest(reason)){
+              #ok(#InvalidRequest(reason))
+            };
+            case(#CommunityFrozen){
+              #ok(#CommunityFrozen)
+            };
+            case(#RulesNotAccepted){
+              #ok(#RulesNotAccepted)
+            };
+            case(#CommunityRulesNotAccepted){
+              #ok(#CommunityRulesNotAccepted)
+            };
+          }
         };
-        case(#ChannelNotFound){
-          #ok(#ChannelNotFound)
-        };
-        case(#ThreadMessageNotFound){
-          #ok(#ThreadMessageNotFound)
-        };
-        case(#MessageEmpty){
-          #ok(#MessageEmpty)
-        };
-        case(#TextTooLong(n)){
-          #ok(#TextTooLong(n))
-        };
-        case(#InvalidPoll(reason)){
-          #ok(#InvalidPoll(reason) )
-        };
-        case(#NotAuthorized){
-          #ok(#NotAuthorized)
-        };
-        case(#UserNotInCommunity){
-          #ok(#UserNotInCommunity)
-        };
-        case(#UserNotInChannel){
-          #ok(#UserNotInChannel)
-        };
-        case(#UserSuspended){
-          #ok(#UserSuspended)
-        };
-        case(#InvalidRequest(reason)){
-          #ok(#InvalidRequest(reason))
-        };
-        case(#CommunityFrozen){
-          #ok(#CommunityFrozen)
-        };
-        case(#RulesNotAccepted){
-          #ok(#RulesNotAccepted)
-        };
-        case(#CommunityRulesNotAccepted){
-          #ok(#CommunityRulesNotAccepted)
-        };
+        case(#err(msg)){
+          #err(msg)
+        }
       }
     };
 

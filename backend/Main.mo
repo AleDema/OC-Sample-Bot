@@ -129,84 +129,84 @@ shared ({ caller }) actor class OCBot() = Self {
     botService.setBotStatus();
   };
 
-  public shared({caller}) func joinTestGroup() : async Result.Result<Text, Text>{
-    if (not G.isCustodian(caller, custodians)) {
-      return #err("Not authorized: " # Principal.toText(caller));
-    };
+  // public shared({caller}) func joinTestGroup() : async Result.Result<Text, Text>{
+  //   if (not G.isCustodian(caller, custodians)) {
+  //     return #err("Not authorized: " # Principal.toText(caller));
+  //   };
 
-    await* botService.joinGroup(TEST_GROUP_ID, null);
-  };
+  //   await* botService.joinGroup(TEST_GROUP_ID, null);
+  // };
 
-  public shared({caller}) func testJoinGroup(groupCanisterId : T.TextPrincipal) : async Result.Result<Text, Text>{
-    if (not G.isCustodian(caller, custodians)) {
-      return #err("Not authorized: " # Principal.toText(caller));
-    };
-    await* botService.joinGroup(groupCanisterId, null);
-  };
+  // public shared({caller}) func testJoinGroup(groupCanisterId : T.TextPrincipal) : async Result.Result<Text, Text>{
+  //   if (not G.isCustodian(caller, custodians)) {
+  //     return #err("Not authorized: " # Principal.toText(caller));
+  //   };
+  //   await* botService.joinGroup(groupCanisterId, null);
+  // };
 
-  public shared({caller}) func testSendMessage(content : Text) : async Result.Result<T.SendMessageResponse, Text>{
-    if (not G.isCustodian(caller, custodians)) {
-      return #err("Not authorized: " # Principal.toText(caller));
-    };
+  // public shared({caller}) func testSendMessage(content : Text) : async Result.Result<T.SendMessageResponse, Text>{
+  //   if (not G.isCustodian(caller, custodians)) {
+  //     return #err("Not authorized: " # Principal.toText(caller));
+  //   };
 
-    let #ok(res) = await* botService.sendTextGroupMessage(TEST_GROUP_ID, content, null)
-    else {
-     return #err("Error sending message");
-    };
-    #ok(res)
-  };
+  //   let #ok(res) = await* botService.sendTextGroupMessage(TEST_GROUP_ID, content, null)
+  //   else {
+  //    return #err("Error sending message");
+  //   };
+  //   #ok(res)
+  // };
 
-  public shared({caller}) func testSendMessageThread(content : Text, threadIndexId : Nat32) : async Result.Result<T.SendMessageResponse, Text>{
-    if (not G.isCustodian(caller, custodians)) {
-      return #err("Not authorized: " # Principal.toText(caller));
-    };
+  // public shared({caller}) func testSendMessageThread(content : Text, threadIndexId : Nat32) : async Result.Result<T.SendMessageResponse, Text>{
+  //   if (not G.isCustodian(caller, custodians)) {
+  //     return #err("Not authorized: " # Principal.toText(caller));
+  //   };
 
-    let #ok(res) = await* botService.sendTextGroupMessage(TEST_GROUP_ID, content, ?threadIndexId)
-    else {
-      return #err("Error sending message in thread");
-    };
-    #ok(res)
-  };
+  //   let #ok(res) = await* botService.sendTextGroupMessage(TEST_GROUP_ID, content, ?threadIndexId)
+  //   else {
+  //     return #err("Error sending message in thread");
+  //   };
+  //   #ok(res)
+  // };
 
-  public shared({caller}) func testEditMessage(messageId : Nat, newContent : Text) : async Result.Result<OC.EditMessageResponse, Text>{
-    if (not G.isCustodian(caller, custodians)) {
-      return #err("Not authorized: " # Principal.toText(caller));
-    };
+  // public shared({caller}) func testEditMessage(messageId : Nat, newContent : Text) : async Result.Result<OC.EditMessageResponse, Text>{
+  //   if (not G.isCustodian(caller, custodians)) {
+  //     return #err("Not authorized: " # Principal.toText(caller));
+  //   };
 
-    let #ok(res) = await*  botService.editTextGroupMessage(TEST_GROUP_ID, messageId, newContent)
-    else{
-      return #err("Error editing message");
-    };
-    #ok(res)
-  };
+  //   let #ok(res) = await*  botService.editTextGroupMessage(TEST_GROUP_ID, messageId, newContent)
+  //   else{
+  //     return #err("Error editing message");
+  //   };
+  //   #ok(res)
+  // };
 
-  public shared({caller}) func testGetMessages(indexes : [Nat32]) : async Result.Result<OC.MessagesResponse, Text>{
-    if (not G.isCustodian(caller, custodians)) {
-      return #err("Not authorized: " # Principal.toText(caller));
-    };
+  // public shared({caller}) func testGetMessages(indexes : [Nat32]) : async Result.Result<OC.MessagesResponse, Text>{
+  //   if (not G.isCustodian(caller, custodians)) {
+  //     return #err("Not authorized: " # Principal.toText(caller));
+  //   };
 
-    await*  botService.getGroupMessagesByIndex(TEST_GROUP_ID, indexes, ?0);
-  };
+  //   await*  botService.getGroupMessagesByIndex(TEST_GROUP_ID, indexes, ?0);
+  // };
 
-  public shared({caller}) func testGetNNSProposals(indexes : [Nat32]) : async Result.Result<OC.MessagesResponse, Text>{
-    // if (not G.isCustodian(caller, custodians)) {
-    //   return #err("Not authorized: " # Principal.toText(caller));
-    // };
+  // public shared({caller}) func testGetNNSProposals(indexes : [Nat32]) : async Result.Result<OC.MessagesResponse, Text>{
+  //   // if (not G.isCustodian(caller, custodians)) {
+  //   //   return #err("Not authorized: " # Principal.toText(caller));
+  //   // };
 
-    await*  botService.getGroupMessagesByIndex(NNS_PROPOSAL_GROUP_ID, indexes, ?0);
-  };
+  //   await*  botService.getGroupMessagesByIndex(NNS_PROPOSAL_GROUP_ID, indexes, ?0);
+  // };
 
-  public shared({caller}) func testGetProposalsGroupLastId() : async Result.Result<OC.MessageIndex, Text>{
-    if (not G.isCustodian(caller, custodians)) {
-      return #err("Not authorized: " # Principal.toText(caller));
-    };
-    var index = switch(await* botService.getLatestGroupMessageIndex(NNS_PROPOSAL_GROUP_ID)){
-      case(?index){index};
-      case(_){return #err("Error")};
-    };
+  // public shared({caller}) func testGetProposalsGroupLastId() : async Result.Result<OC.MessageIndex, Text>{
+  //   if (not G.isCustodian(caller, custodians)) {
+  //     return #err("Not authorized: " # Principal.toText(caller));
+  //   };
+  //   var index = switch(await* botService.getLatestGroupMessageIndex(NNS_PROPOSAL_GROUP_ID)){
+  //     case(?index){index};
+  //     case(_){return #err("Error")};
+  //   };
 
-    return #ok(index)
-  };
+  //   return #ok(index)
+  // };
 
   
   public func testRange(start: Int, end: Nat) : async Result.Result<([OC.MessageEventWrapper], [Nat32]), ()>{

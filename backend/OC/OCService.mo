@@ -2,6 +2,8 @@ import OCApi "./OCApi";
 import Result "mo:base/Result";
 import Principal "mo:base/Principal";
 import OCTypes "./OCTypes";
+import Error "mo:base/Error";
+
 module {
 public class OCServiceImpl() {
 
@@ -11,7 +13,7 @@ public class OCServiceImpl() {
         let res = await user_index.c2c_register_bot({username= username; display_name= displayName});
         return #ok(res)
         } catch(e){
-          return #err("Trapped")
+          return #err(Error.message(e))
         };  
     };
 
@@ -21,7 +23,7 @@ public class OCServiceImpl() {
         let res = await group_index.public_summary(args);
         return #ok(res)
         } catch(e){
-          return #err("Trapped")
+          return #err(Error.message(e))
         };  
     };
 
@@ -44,7 +46,7 @@ public class OCServiceImpl() {
         });
         return #ok(res)
       }  catch(e){
-        return #err("Trapped")
+        return #err(Error.message(e))
       };  
     };
 
@@ -60,7 +62,7 @@ public class OCServiceImpl() {
 
         #ok(res);
       }catch(e){
-        return #err("Trapped")
+        return #err(Error.message(e))
       }
     };
 
@@ -70,7 +72,7 @@ public class OCServiceImpl() {
         let res = await localIndexCanister.join_group(args);
         #ok(res);
       } catch(e){
-        return #err("Trapped")
+        return #err(Error.message(e))
       }
     };
 
@@ -80,7 +82,7 @@ public class OCServiceImpl() {
         let res = await group_canister.messages_by_message_index(args);
         #ok(res)
       }catch(e){
-        return #err("Trapped")
+        return #err(Error.message(e))
       };
     }
   };
