@@ -29,6 +29,8 @@ import LT "../Log/LogTypes";
 import BT "./BotTypes";
 import {  nhash; n64hash; n32hash; thash } "mo:map/Map";
 
+  //TODOs:
+  // set avatar
 module {
 
   public func initModel() : BT.BotModel {
@@ -50,19 +52,19 @@ module {
   let BOT_REGISTRATION_FEE: Nat = 10_000_000_000_000; // 10T
 
   public class BotService(botModel : BT.BotModel, ocService : OC.OCService, logService : LT.LogService) = {
-    public func initBot<system>(name : Text, displayName : ?Text) : async Result.Result<Text, Text>{
+    public func initBot<system>(name : Text, _displayName : ?Text) : async Result.Result<Text, Text>{
       switch(botModel.botStatus){
         case(#NotInitialized){
           botModel.botStatus := #Initializing;
           Cycles.add<system>(BOT_REGISTRATION_FEE);
-          let res = await* ocService.registerBot({username= name; display_name= displayName});
+          let res = await* ocService.registerBot(USER_INDEX_CANISTER, {username= name; displayName= _displayName});
           switch(res){
             case(#ok(data)){
               switch(data){
                 case (#Success or #AlreadyRegistered){
                   botModel.botStatus := #Initialized;
                   botModel.botName := ?name;
-                  botModel.botDisplayName := displayName;
+                  botModel.botDisplayName := _displayName;
                   return #ok("Initialized");
                 };
                 case (#InsufficientCyclesProvided(n)) {
@@ -92,27 +94,7 @@ module {
       }
     };
 
-
-    func lookupLocalUserIndex(group: T.TextPrincipal) : async* Result.Result<Principal, Text> {
-      let res = await* ocService.publicSummary(group, { invite_code = null});
-      switch(res){
-        case(#ok(data)){
-        switch(data){
-          case (#Success(response)){
-            #ok(response.summary.local_user_index_canister_id)
-          };
-          case (#NotAuthorized(_)){
-            #err("GroupNotFound")
-          };
-        }
-        };
-        case(#err(msg)){
-          #err(msg)
-        };
-      }
-    };
-
-    public func joinGroup(groupCanisterId : T.TextPrincipal, inviteCode : ?Nat64) : async* Result.Result<Text, Text>{
+    public func joinGroup(groupCanisterId : Text, inviteCode : ?Nat64) : async* Result.Result<Text, Text>{
       let indexCanister = await* lookupLocalUserIndex(groupCanisterId);
       switch(indexCanister){
         case(#ok(id)){
@@ -140,8 +122,7 @@ module {
       };
     };
 
-
-    public func sendGroupMessage(groupCanisterId : T.TextPrincipal, content : OCApi.MessageContentInitial, threadIndexId : ?Nat32) : async* Result.Result<T.SendMessageResponse, Text>{
+    public func sendGroupMessage(groupCanisterId : Text, content : OCApi.MessageContentInitial, threadIndexId : ?Nat32) : async* Result.Result<T.SendMessageResponse, Text>{
       botModel.lastMessageId := botModel.lastMessageId + 1;
       let id = botModel.lastMessageId;
       let #ok(res) = await* ocService.sendGroupMessage(groupCanisterId, Option.get(botModel.botName, ""), botModel.botDisplayName, content, botModel.lastMessageId, threadIndexId)
@@ -195,13 +176,30 @@ module {
       }
     };
 
-    func sendTextGroupMessage(groupCanisterId : T.TextPrincipal, content : Text, threadIndexId : ?Nat32) : async* Result.Result<T.SendMessageResponse, Text>{
+    public func sendTextGroupMessage(groupCanisterId : Text, content : Text, threadIndexId : ?Nat32) : async* Result.Result<T.SendMessageResponse, Text>{
       await* sendGroupMessage(groupCanisterId, #Text({text = content}), threadIndexId);
     };
 
-    func editGroupMessage(groupCanisterId : T.TextPrincipal, messageId : OCApi.MessageId, newContent : OCApi.MessageContentInitial) : async* Result.Result<OCApi.MessagesResponse, Text>{
+    public func editGroupMessage(groupCanisterId : Text, messageId : OCApi.MessageId, newContent : OCApi.MessageContentInitial) : async* Result.Result<OCApi.EditMessageResponse, Text>{
       let #ok(res) = await* ocService.editGroupMessage(groupCanisterId, messageId, newContent)
       else{
+        return #err("Trapped");
+      };
+
+      #ok(res);
+    };
+
+    public func editTextGroupMessage(groupCanisterId : Text, messageId : OCApi.MessageId, newContent : Text) : async* Result.Result<OCApi.EditMessageResponse, Text>{
+      await* editGroupMessage(groupCanisterId, messageId, #Text({text = newContent}));
+    };
+
+
+    public func getGroupMessagesByIndex(groupCanisterId : Text, indexes : [Nat32] ,latest_known_update : ?Nat64) : async* Result.Result<OCApi.MessagesResponse, Text> {
+      let #ok(res) = await* ocService.messagesByMessageIndex(groupCanisterId, {
+        thread_root_message_index = null;
+        messages = indexes;
+        latest_known_update = latest_known_update;
+      }) else {
         return #err("Trapped");
       };
 
@@ -215,69 +213,65 @@ module {
       }
     };
 
-    func editTextGroupMessage(groupCanisterId : T.TextPrincipal, messageId : OCApi.MessageId, newContent : Text) : async* Result.Result<OCApi.MessagesResponse, Text>{
-      await* editGroupMessage(groupCanisterId, messageId, #Text({text = newContent}));
+    func lookupLocalUserIndex(group: Text) : async* Result.Result<Principal, Text> {
+      let res = await* ocService.publicSummary(group, { invite_code = null});
+      switch(res){
+        case(#ok(data)){
+        switch(data){
+          case (#Success(response)){
+            #ok(response.summary.local_user_index_canister_id)
+          };
+          case (#NotAuthorized(_)){
+            #err("GroupNotFound")
+          };
+        }
+        };
+        case(#err(msg)){
+          #err(msg)
+        };
+      }
+    };
+
+    public func getNNSProposalMessageData(message : OCApi.MessageEventWrapper) : Result.Result<{proposalId : OCApi.ProposalId; messageIndex : OCApi.MessageIndex}, Text>{
+      let event = message.event;
+      switch(event.content){
+        case(#GovernanceProposal(p)){
+          switch(p.proposal){
+            case(#NNS(proposal)){
+              return #ok({
+                proposalId = proposal.id;
+                messageIndex = event.message_index;
+              })
+            };
+            case(#SNS(_)){
+              return #err("Not a NNS proposal");
+            };
+          }
+        };
+        case(_){
+          return #err("Not a governance proposal");
+        }
+      }
+    };
+
+    public func getLatestGroupMessageIndex(groupCanisterId : Text) : async* ?OCApi.MessageIndex{
+     let #ok(res) = await* ocService.publicSummary(groupCanisterId, { invite_code = null})
+     else {
+      return null;
+     };
+
+      switch(res){
+        case(#Success(val)){
+          return val.summary.latest_message_index;
+        };
+        case(_){
+          return null;
+        };
+      };
     };
 
 
   };
-
-  // func getGroupMessagesByIndex(groupCanisterId : T.TextPrincipal, indexes : [Nat32] ,latest_known_update : ?Nat64) : async* Result.Result<OC.MessagesResponse, Text> {
-  //   let group_canister : OC.GroupIndexCanister = actor (groupCanisterId);
-  //   let res = await group_canister.messages_by_message_index({
-  //     thread_root_message_index = null;
-  //     messages = indexes;
-  //     latest_known_update = latest_known_update;
-  //   });
-
-  //   switch(res){
-  //     case(#Success(val)){
-  //       #ok(val);
-  //     };
-  //     case(_){
-  //       return #err("Error")
-  //     };
-  //   }
-  // };
-
-  // func getNNSProposalMessageData(message : OC.MessageEventWrapper) : Result.Result<{proposalId : OC.ProposalId; messageIndex : OC.MessageIndex}, Text>{
-  //   let event = message.event;
-  //   switch(event.content){
-  //     case(#GovernanceProposal(p)){
-  //       switch(p.proposal){
-  //         case(#NNS(proposal)){
-  //           return #ok({
-  //             proposalId = proposal.id;
-  //             messageIndex = event.message_index;
-  //           })
-  //         };
-  //         case(#SNS(_)){
-  //           return #err("Not a NNS proposal");
-  //         };
-  //       }
-  //     };
-  //     case(_){
-  //       return #err("Not a governance proposal");
-  //     }
-  //   }
-  // };
-
-  // func getLatestMessageIndex(groupCanisterId : T.TextPrincipal) : async* ?OC.MessageIndex{
-  //   let group_canister : OC.GroupIndexCanister = actor (groupCanisterId);
-  //   let res = await group_canister.public_summary({
-  //     invite_code = null;
-  //     correlation_id = 0;
-  //   });
-
-  //   switch(res){
-  //     case(#Success(val)){
-  //       return val.summary.latest_message_index;
-  //     };
-  //     case(_){
-  //       return null;
-  //     };
-  //   };
-  // };
 
 
   //Waiting for OC support
