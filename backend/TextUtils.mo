@@ -7,17 +7,20 @@ import Option "mo:base/Option";
 import Nat64 "mo:base/Nat64";
 import Text "mo:base/Text";
 import Nat32 "mo:base/Nat32";
+import Int64 "mo:base/Int64";
 import Map "mo:map/Map";
+import DateTime "mo:datetime/DateTime";
 
 module {
   let { nhash; n64hash; n32hash } = Map;
 
   public func formatProposal(proposal : TT.ProposalAPI) : Text {
-    var text = "Proposal " # Nat.toText(proposal.id) # ":\n";
+    var text = "Proposal " # Nat.toText(proposal.id) # "\n";
     text := text # "Title: " # proposal.title # "\n";
     text := text # "Topic: " # proposalTopicToText(T.topicIdToVariant(proposal.topicId)) # "\n";
     //add type
-    //add date created
+    let date = DateTime.DateTime(Int64.toInt(Int64.fromNat64(proposal.proposalTimestampSeconds)));
+    text := text # "Date Created: " # DateTime.toText(date) # "\n";
     text := text # "Proposer: " # Nat64.toText(proposal.proposer) # "\n";
     text
   };

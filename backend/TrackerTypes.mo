@@ -6,13 +6,15 @@ module {
     #InvalidProposalId : { end : ProposalId; start : ProposalId };
   };
   public type ProposalAPI = {
-    id : ProposalId;
-    status : ProposalStatus;
-    title : Text;
-    description : ?Text;
-    timestamp : Nat64;
-    proposer : Nat64;
-    topicId : Int32;
+      id : ProposalId;
+      topicId : Int32;
+      title : Text;
+      description : ?Text;
+      proposer : Nat64;
+      timestamp : Nat64;
+      status : ProposalStatus;
+      deadlineTimestampSeconds : ?Nat64;
+      proposalTimestampSeconds : Nat64;
   };
   public type ProposalId = Nat;
   public type ProposalStatus = {
