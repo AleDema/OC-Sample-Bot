@@ -30,6 +30,8 @@ import {  nhash; n64hash; n32hash; thash } "mo:map/Map";
 import BT "./OC/BotTypes";
 import BS "./OC/BotService";
 import OCS "./OC/OCService";
+import GS "./Governance/GovernanceService";
+import PS "./Proposal/ProposalService";
 import PB "./ProposalBot/ProposalBot";
 import DateTime "mo:datetime/DateTime";
 shared ({ caller }) actor class OCBot() = Self {
@@ -46,8 +48,11 @@ shared ({ caller }) actor class OCBot() = Self {
   let ocService = OCS.OCServiceImpl();
   let botService = BS.BotServiceImpl(botData, ocService, logService);
 
+  let governanceService = GS.GovernanceService();
+  let proposalService = PS.ProposalService(governanceService, logService);
+
   stable let proposalBotData = PB.initModel();
-  let proposalBot= PB.ProposalBot(proposalBotData, botService, logService);
+  let proposalBot= PB.ProposalBot(proposalBotData, botService, proposalService, logService);
 
   //////////////////////////
   ////////////////// PROPOSAL BOT

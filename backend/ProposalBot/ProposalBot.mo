@@ -15,6 +15,9 @@ import {  nhash; n64hash; n32hash; thash } "mo:map/Map";
 import TU "../TextUtils";
 import OC "../OC/OCApi";
 import T "../Types";
+import PS "../Proposal/ProposalService";
+import PM "../Proposal/ProposalMappings";
+import GU "../Governance/GovernanceUtils";
 
 module{
 
@@ -49,8 +52,8 @@ module{
     let TEST_GROUP_ID = "evg6t-laaaa-aaaar-a4j5q-cai";
     let GOVERNANCE_ID = "rrkah-fqaaa-aaaaa-aaaaq-cai";
     
-    public class ProposalBot(model : ProposalBotModel, botService : BT.BotService, logService : LT.LogService) = {
-        
+    public class ProposalBot(model : ProposalBotModel, botService : BT.BotService, proposalService : PS.ProposalService, logService : LT.LogService) = {
+        let topics = PS.processExcludeTopics(GU.NNSFunctions, #Include([8,13]));
         public func initTimer<system>(_tickrateInSeconds : ?Nat) : async Result.Result<(), Text> {
                     
             let tickrate : Nat = Option.get(_tickrateInSeconds, 5* 60); // 1 minutes
@@ -81,33 +84,22 @@ module{
 
         public func update(start : ?Nat) : async () {
             logService.addLog(#Info, "Running update", null);
-            let tracker : TT.Tracker = actor ("vkqwa-eqaaa-aaaap-qhira-cai");
+           // let tracker : TT.Tracker = actor ("vkqwa-eqaaa-aaaap-qhira-cai");
 
             model.numberOfTicksSinceUpdate := model.numberOfTicksSinceUpdate + 1;
             logService.addLog(#Info, "Number of ticks since last update: " # Nat.toText(model.numberOfTicksSinceUpdate), null);
             
-            let res = await tracker.getProposals(GOVERNANCE_ID, start, [8, 13]);
+            let res = await* proposalService.listProposalsFromId(GOVERNANCE_ID, start, PS.ListProposalArgsDefault());
+            //let res = await tracker.getProposals(GOVERNANCE_ID, start, #Include([8, 13]));
             switch(res){
-                case(#ok(data)){
-                    switch(data){
-                        case(#Success(d) or #LimitReached(d)){
-                            //for now we will just ignore the limit reached case, it will just take longer to sync all proposals
-                            for(proposal in Array.vals(d)){
-                                Map.set(model.proposalsLookup, nhash, proposal.id, { proposalData = proposal; messageIndex = null; attempts = 0});
-                            };
-
-                            ignore await* matchProposalsWithMessages(NNS_PROPOSAL_GROUP_ID, model.proposalsLookup);
-                        }
-                    }
+                case(#ok(proposals)){
+                    let mappedProps = PM.mapGetProposals(proposals.proposal_info);
+                    for(proposal in Array.vals(mappedProps)){
+                        Map.set(model.proposalsLookup, nhash, proposal.id, { proposalData = PM.proposalToAPI(proposal); messageIndex = null; attempts = 0});
+                    };
                 };
                 case(#err(e)){
-                    switch(e){
-                        case(#InvalidProposalId(d)){
-                            logService.addLog(#Info, "InvalidProposalId, set last proposal id to: " # Nat.toText(d.end + 1), null);
-                            model.lastProposalId := ?(d.end); //TODO; remove temp fix until poll service is fixed
-                        };
-                        case(_){};
-                    };
+                    logService.logError("listProposalsFromId return err: " # e, null);
                 };
             };
 
