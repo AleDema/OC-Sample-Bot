@@ -64,6 +64,10 @@ module{
                 });
                 switch(res){
                     case(#ok(res)){
+                        if(Array.size(res.proposal_info) == 0){
+                            break sync;
+                        };
+
                         var min = res.proposal_info[0].id;
                         var check = false;
                         for (proposal in Array.vals(res.proposal_info)){
@@ -104,29 +108,28 @@ module{
     }
   };
 
-    public func processExcludeTopics(validTopics : [(Int32, Text, ?Text)], topicStrategy : {#Include : [Int32]; #Exclude : [Int32]}) : [Int32] {
-        let buf : Buffer.Buffer<Int32> =  Buffer.Buffer(50);
-        switch(topicStrategy){
-            case(#Include(ids)){
-                for(t in Array.vals(validTopics)){
-                    if(Option.isSome(Array.find(ids, func (x : Int32) : Bool {
-                        x != t.0
-                    }))){
-                        buf.add(t.0);
-                    };
-                };
-            };
-            case(#Exclude(ids)){
-                for(t in Array.vals(validTopics)){
-                    if(Option.isSome(Array.find(ids, func (x : Int32) : Bool {
-                        x == t.0
-                    }))){
-                        buf.add(t.0);
-                    };
-                };
+    // public func processIncludeTopics(validTopics : [(Int32, Text, ?Text)], topicsToInclude : [Int32]) : [Int32] {
+    //     return Array.mapFilter<(Int32, Text, ?Text), Int32>(validTopics, func (t : (Int32, Text, ?Text)) : ?Int32 {
+    //         for(id in Array.vals(topicsToInclude)){
+    //             if(id != t.0){
+    //                 return ?t.0;
+    //             }
+    //         };
+    //         return null;
+    //     });
+    // };
+
+    
+    public func processIncludeTopics(validTopics : [(Int32, Text, ?Text)], topicsToInclude : [Int32]) : [Int32] {
+
+        let buf = Buffer.Buffer<Int32>(50);
+        for(id in Array.vals(validTopics)){
+            if(Option.isNull(Array.find(topicsToInclude, func (x : Int32) : Bool { return x == id.0 }))){
+                buf.add(id.0);
             };
         };
-        return Buffer.toArray(buf);
+
+        Buffer.toArray(buf);
     };
 
 
