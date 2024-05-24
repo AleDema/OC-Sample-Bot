@@ -104,6 +104,7 @@ module{
                     };
             };
         };
+        Buffer.reverse(proposalBuffer);
         #ok({proposal_info = Buffer.toArray(proposalBuffer)}); 
     }
   };
