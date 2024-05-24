@@ -30,10 +30,13 @@ import {  nhash; n64hash; n32hash; thash } "mo:map/Map";
 import BT "./OC/BotTypes";
 import BS "./OC/BotService";
 import OCS "./OC/OCService";
+import OCApi "./OC/OCApi";
 import GS "./Governance/GovernanceService";
+import GT "./Governance/GovernanceTypes";
 import PS "./Proposal/ProposalService";
 import PB "./ProposalBot/ProposalBot";
 import DateTime "mo:datetime/DateTime";
+import Prng "mo:prng";
 shared ({ caller }) actor class OCBot() = Self {
 
   let NNS_PROPOSAL_GROUP_ID = "labxu-baaaa-aaaaf-anb4q-cai";
@@ -63,6 +66,40 @@ shared ({ caller }) actor class OCBot() = Self {
         proposalBotData.timerId := ?Timer.recurringTimer<system>(#seconds(5* 6), func() : async () {
         await proposalBot.update(proposalBotData.lastProposalId);
         });
+    }
+  };
+
+  public func testSendChannelMessage() : async Result.Result<OCApi.SendMessageResponse, Text>{
+    let seed : Nat64 = Nat64.fromIntWrap(Time.now());
+    let rng = Prng.Seiran128();
+    rng.init(seed);
+    let id = Nat64.toNat(rng.next());
+    await* ocService.sendChannelMessage("x5c7v-eyaaa-aaaar-bfcca-cai", 55969945094658563960039470874366039185, "test_bot", null, #Text({text = "Test"}), id,  null)
+  };
+
+  public func testJoinCommunity() : async Result.Result<OCApi.JoinCommunityResponse, Text>{
+    await* ocService.joinCommunity("x5c7v-eyaaa-aaaar-bfcca-cai", {
+      user_id = Principal.fromActor(Self);
+      principal= Principal.fromActor(Self);
+      invite_code= null;
+      is_platform_moderator = false;
+      is_bot= true;
+      diamond_membership_expires_at= null;
+      verified_credential_args=null;
+    });
+  };
+
+
+  public func testListProposals(start : Nat) : async Result.Result<Nat, Text>{
+   let res = await* proposalService.listProposalsAfterd("rrkah-fqaaa-aaaaa-aaaaq-cai", ?start, {PS.ListProposalArgsDefault() with omitLargeFields = ?true});
+
+    switch(res){
+      case(#ok(data)){
+       #ok(Array.size(data.proposal_info));
+      };
+      case(#err(err)){
+       #err(err)
+      }
     }
   };
 

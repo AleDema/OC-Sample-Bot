@@ -49,6 +49,33 @@ public class OCServiceImpl() {
         return #err(Error.message(e))
       };  
     };
+    
+    public func sendChannelMessage(communityCanisterId : Text, channelId : Nat, sender : Text, senderDisplayName : ?Text, content : OCApi.MessageContent, messageId : Nat,  threadIndexId : ?Nat32) : async* Result.Result<OCApi.SendMessageResponse, Text> {
+      let channel_canister : OCApi.CommunityIndexCanister = actor (communityCanisterId);
+      try{
+        let res = await channel_canister.send_message({
+          channel_id = channelId;
+          message_id = messageId;
+          thread_root_message_index = threadIndexId;
+          content = content;
+          sender_name = sender;
+          sender_display_name = senderDisplayName;
+          replies_to =  null;
+          mentioned = [];
+          forwarding = false;
+          rules_accepted=  null;
+          message_filter_failed = null;
+          correlation_id= 0;
+          block_level_markdown = false;
+          community_rules_accepted= null;
+          channel_rules_accepted = null;
+
+        });
+        return #ok(res)
+      }  catch(e){
+        return #err(Error.message(e))
+      };  
+    };
 
     public func editGroupMessage(groupCanisterId :Text, messageId : OCApi.MessageId, newContent : OCApi.MessageContentInitial) : async* Result.Result<OCApi.EditMessageResponse, Text> {
       try{
@@ -70,6 +97,18 @@ public class OCServiceImpl() {
       try{
         let localIndexCanister : OCApi.LocalUserIndexCanister = actor (groupCanisterId);
         let res = await localIndexCanister.join_group(args);
+        #ok(res);
+      } catch(e){
+        return #err(Error.message(e))
+      }
+    };
+
+
+    public func joinCommunity(communityCanisterId : Text, args : OCApi.JoinCommunityArgs) : async* Result.Result<OCApi.JoinCommunityResponse, Text> {
+      try{
+        //let user_index : OCApi.UserIndexCanister = actor (userIndexCanister);
+        let communityIndexCanister : OCApi.CommunityIndexCanister = actor (communityCanisterId);
+        let res = await communityIndexCanister.join_community(args);
         #ok(res);
       } catch(e){
         return #err(Error.message(e))

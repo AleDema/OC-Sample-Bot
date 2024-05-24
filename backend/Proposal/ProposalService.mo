@@ -39,7 +39,7 @@ module{
         };
 
 
-        public func listProposalsFromId(governanceId : Text, _from : ?Nat, args :  PT.ListProposalArgs) : async* Result.Result<GT.ListProposalInfoResponse, Text>{
+        public func listProposalsAfterd(governanceId : Text, _after : ?Nat, args :  PT.ListProposalArgs) : async* Result.Result<GT.ListProposalInfoResponse, Text>{
             let info = {
                 include_reward_status = args.includeRewardStatus;
                 omit_large_fields =  args.omitLargeFields;
@@ -49,7 +49,7 @@ module{
                 include_all_manage_neuron_proposals = args.includeAllManageNeuronProposals;
                 include_status = args.includeStatus;
             };
-            let #ok(from) = Utils.optToRes(_from)
+            let #ok(after) = Utils.optToRes(_after)
             else{
                 return await* governanceService.listProposals(governanceId, info);
             };
@@ -73,9 +73,9 @@ module{
                         for (proposal in Array.vals(res.proposal_info)){
                             switch((proposal.id)){
                                 case((?p)){
-                                    if(Nat64.toNat(p.id) < from){
+                                    if(Nat64.toNat(p.id) <= after){
                                         check := true;
-                                    } else if (Nat64.toNat(p.id) >= from){
+                                    } else if (Nat64.toNat(p.id) > after){
                                         proposalBuffer.add(proposal);
                                     };
                                     

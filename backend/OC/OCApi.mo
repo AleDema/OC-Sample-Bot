@@ -1,3 +1,4 @@
+import Nat64 "mo:base/Nat64";
 // This is a generated Motoko binding.
 // Please use `import service "ic:canister_id"` instead to call canisters on the IC if possible.
 
@@ -1544,6 +1545,49 @@ module {
     join_group : (JoinGroupArgs) -> async JoinGroupResponse;
   };
 
+  public type SendChannelMessageArgs = {
+   channel_id: ChannelId;
+   thread_root_message_index: ?MessageIndex;
+   message_id: MessageId;
+   content: MessageContent;
+   sender_name: Text;
+   sender_display_name: ?Text;
+   replies_to: ?GroupReplyContext;
+   mentioned: [User];
+   forwarding: Bool;
+   block_level_markdown: Bool;
+   community_rules_accepted: ?Version;
+   channel_rules_accepted: ?Version;
+   message_filter_failed: ?Nat64;
+};
+
+public type  VerifiedCredentialGateArgs = {
+  user_ii_principal: Principal;
+  credential_jwt: Text;
+  ii_origin: Text;
+};
+
+ public type JoinCommunityArgs = {
+    user_id: UserId;
+    principal: Principal;
+    invite_code: ?Nat64;
+    is_platform_moderator: Bool;
+    is_bot: Bool;
+    diamond_membership_expires_at: ?Int;
+    verified_credential_args:?VerifiedCredentialGateArgs;
+  };
+
+ public type JoinCommunityResponse = {
+    #Success;
+    #AlreadyInCommunity;
+    #GateCheckFailed;
+    #NotInvited;
+    #UserBlocked;
+    #MemberLimitReached : Nat32;
+    #CommunityFrozen;
+    #InternalError : Text;
+};
+
   public type GroupIndexCanister = actor {
      public_summary : query ({invite_code : ?Nat64;}) -> async {
       #Success: PublicSummarySuccessResult;
@@ -1552,6 +1596,11 @@ module {
     messages_by_message_index : query (MessagesByMessageIndexArgs) -> async (MessagesByMessageIndexResponse);
     send_message_v2 : (SendMessageV2Args) -> async (SendMessageResponse);
     edit_message_v2 : (EditMessageV2Args) -> async (EditMessageResponse);
+  };
+
+  public type CommunityIndexCanister = actor {
+    send_message : (SendChannelMessageArgs) -> async (SendMessageResponse);
+    join_community : (JoinCommunityArgs) -> async (JoinCommunityResponse);
   };
 
 }

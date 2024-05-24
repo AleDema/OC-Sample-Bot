@@ -55,7 +55,7 @@ module{
     public class ProposalBot(model : ProposalBotModel, botService : BT.BotService, proposalService : PS.ProposalService, logService : LT.LogService) = {
         public func initTimer<system>(_tickrateInSeconds : ?Nat) : async Result.Result<(), Text> {
                     
-            let tickrate : Nat = Option.get(_tickrateInSeconds, 5* 60); // 1 minutes
+            let tickrate : Nat = Option.get(_tickrateInSeconds, 5* 60); // 5 minutes
             switch(model.timerId){
                 case(?t){ return #err("Timer already created")};
                 case(_){};
@@ -81,13 +81,13 @@ module{
             }
         };
 
-        public func update(start : ?Nat) : async () {
+        public func update(after : ?Nat) : async () {
             model.numberOfTicksSinceUpdate := model.numberOfTicksSinceUpdate + 1;
             logService.addLog(#Info, "[Running update] Number of ticks since last update: " # Nat.toText(model.numberOfTicksSinceUpdate), null);
             
             let topics = PS.processIncludeTopics(GU.NNSFunctions,[8,13]);
             //logService.logInfo("topics size: " # Nat.toText(Array.size(topics)), null);
-            let res = await* proposalService.listProposalsFromId(GOVERNANCE_ID, start, {PS.ListProposalArgsDefault()
+            let res = await* proposalService.listProposalsAfterd(GOVERNANCE_ID, after, {PS.ListProposalArgsDefault()
                 with excludeTopic = topics;
             });
 
@@ -102,7 +102,7 @@ module{
                     };
                 };
                 case(#err(e)){
-                    logService.logError("listProposalsFromId return err: " # e, null);
+                    logService.logError("listProposalsAfterd return err: " # e, null);
                 };
             };
 
