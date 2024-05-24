@@ -53,7 +53,6 @@ module{
     let GOVERNANCE_ID = "rrkah-fqaaa-aaaaa-aaaaq-cai";
     
     public class ProposalBot(model : ProposalBotModel, botService : BT.BotService, proposalService : PS.ProposalService, logService : LT.LogService) = {
-        let topics = PS.processExcludeTopics(GU.NNSFunctions, #Include([8,13]));
         public func initTimer<system>(_tickrateInSeconds : ?Nat) : async Result.Result<(), Text> {
                     
             let tickrate : Nat = Option.get(_tickrateInSeconds, 5* 60); // 1 minutes
@@ -83,18 +82,22 @@ module{
         };
 
         public func update(start : ?Nat) : async () {
-            logService.addLog(#Info, "Running update", null);
-           // let tracker : TT.Tracker = actor ("vkqwa-eqaaa-aaaap-qhira-cai");
-
             model.numberOfTicksSinceUpdate := model.numberOfTicksSinceUpdate + 1;
-            logService.addLog(#Info, "Number of ticks since last update: " # Nat.toText(model.numberOfTicksSinceUpdate), null);
+            logService.addLog(#Info, "[Running update] Number of ticks since last update: " # Nat.toText(model.numberOfTicksSinceUpdate), null);
             
-            let res = await* proposalService.listProposalsFromId(GOVERNANCE_ID, start, PS.ListProposalArgsDefault());
-            //let res = await tracker.getProposals(GOVERNANCE_ID, start, #Include([8, 13]));
+            let topics = PS.processIncludeTopics(GU.NNSFunctions,[8,13]);
+            //logService.logInfo("topics size: " # Nat.toText(Array.size(topics)), null);
+            let res = await* proposalService.listProposalsFromId(GOVERNANCE_ID, start, {PS.ListProposalArgsDefault()
+                with excludeTopic = topics;
+            });
+
             switch(res){
                 case(#ok(proposals)){
+                    logService.logInfo("Array size: " # Nat.toText(Array.size(proposals.proposal_info)), null);
                     let mappedProps = PM.mapGetProposals(proposals.proposal_info);
+                    logService.logInfo("mappedProps size: " # Nat.toText(Array.size(mappedProps)), null);
                     for(proposal in Array.vals(mappedProps)){
+                        //logService.logInfo("[Adding to map", null);
                         Map.set(model.proposalsLookup, nhash, proposal.id, { proposalData = PM.proposalToAPI(proposal); messageIndex = null; attempts = 0});
                     };
                 };
@@ -102,6 +105,8 @@ module{
                     logService.logError("listProposalsFromId return err: " # e, null);
                 };
             };
+
+            ignore await* matchProposalsWithMessages(NNS_PROPOSAL_GROUP_ID, model.proposalsLookup);
 
             for(proposal in Map.vals(model.proposalsLookup)){
 
@@ -132,8 +137,8 @@ module{
                     case(_){};
             };
 
-                if(proposal.proposalData.id > Option.get(model.lastProposalId, 0)){
-                    model.lastProposalId := ?(proposal.proposalData.id); //TODO; remove temp fix until poll service is fixed
+                if(proposal.proposalData.id > Option.get(model.lastProposalId, 0) or Option.isNull(model.lastProposalId)){
+                    model.lastProposalId := ?(proposal.proposalData.id);
                 };
             };
 
@@ -286,11 +291,11 @@ module{
                 return;
             };
             switch(res){
-            case(#Success(d)){
-                let text2 = TU.formatBatchProposalThreadMsg(votingGroupId, proposalList, proposalsLookup);
-                let res = await* botService.sendTextGroupMessage(targetGroupId, text2, ?d.message_index);
-            };
-            case(_){};
+                case(#Success(d)){
+                    let text2 = TU.formatBatchProposalThreadMsg(votingGroupId, proposalList, proposalsLookup);
+                    let res = await* botService.sendTextGroupMessage(targetGroupId, text2, ?d.message_index);
+                };
+                case(_){};
             }
         };
     }
