@@ -5,12 +5,6 @@ module{
         now : () -> Int;
     };
 
-    public class TimeServiceImpl() {
-        public func now() : Int {
-            return Time.now();
-        };
-    };
-
     public class TimeServiceMock() {
         var init = true;
         var time : Time.Time = 0;
