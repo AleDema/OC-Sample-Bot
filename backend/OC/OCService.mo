@@ -17,10 +17,30 @@ public class OCServiceImpl() {
         };  
     };
 
-    public func publicSummary(groupCanisterId : Text, args : {invite_code : ?Nat64;}) : async* Result.Result<OCTypes.PublicSummaryResponse, Text>{
+    public func userSummary(userIndexCanister : Text, {userId : ?OCApi.UserId; username : ?Text}) : async* Result.Result<OCApi.UserSummaryResponse, Text>{
+      let user_index : OCApi.UserIndexCanister = actor (userIndexCanister);
+      try{
+        let res = await user_index.user({username= username; user_id= userId});
+        return #ok(res)
+        } catch(e){
+          return #err(Error.message(e))
+        };  
+    };
+
+    public func publicGroupSummary(groupCanisterId : Text, args : {invite_code : ?Nat64;}) : async* Result.Result<OCTypes.PublicSummaryResponse, Text>{
       let group_index : OCApi.GroupIndexCanister = actor (groupCanisterId);
       try{
         let res = await group_index.public_summary(args);
+        return #ok(res)
+        } catch(e){
+          return #err(Error.message(e))
+        };  
+    };
+
+    public func publicCommunitySummary(communityCanisterId : Text, args : {invite_code : ?Nat64;}) : async* Result.Result<OCApi.CommunitySummaryResponse, Text>{
+      let community_index : OCApi.CommunityIndexCanister = actor (communityCanisterId);
+      try{
+        let res = await community_index.summary(args);
         return #ok(res)
         } catch(e){
           return #err(Error.message(e))
@@ -106,7 +126,6 @@ public class OCServiceImpl() {
 
     public func joinCommunity(communityCanisterId : Text, args : OCApi.JoinCommunityArgs) : async* Result.Result<OCApi.JoinCommunityResponse, Text> {
       try{
-        //let user_index : OCApi.UserIndexCanister = actor (userIndexCanister);
         let communityIndexCanister : OCApi.CommunityIndexCanister = actor (communityCanisterId);
         let res = await communityIndexCanister.join_community(args);
         #ok(res);

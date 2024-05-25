@@ -134,6 +134,82 @@ module {
       };
     };
 
+    func localCommunityIndex(communityCanisterId : Text) : async* Result.Result<Principal, Text>{
+      let res = await* ocService.publicCommunitySummary(communityCanisterId, { invite_code = null});
+      switch(res){
+        case(#ok(data)){
+        switch(data){
+          case (#Success(response)){
+            #ok(response.local_user_index_canister_id)
+          };
+          case (#PrivateCommunity(_)){
+            #err("PrivateCommunity")
+          };
+        }
+        };
+        case(#err(msg)){
+          #err(msg)
+        };
+      }
+    };
+
+    public func joinCommunity(communityCanisterId : Text, inviteCode : ?Nat64) : async* Result.Result<Text, Text>{
+      let indexCanister = await* localCommunityIndex(communityCanisterId);
+      switch(indexCanister){
+        case(#ok(id)){
+          let res = await* ocService.joinCommunity(Principal.toText(id), { 
+            community_id = Principal.fromText(communityCanisterId);
+            user_id = Principal.fromText("7g2oq-raaaa-aaaap-qb7sq-cai");
+            principal= Principal.fromText("7g2oq-raaaa-aaaap-qb7sq-cai");
+            invite_code= inviteCode;
+            is_platform_moderator = false;
+            is_bot= true;
+            diamond_membership_expires_at= null;
+            verified_credential_args=null;
+          });
+          switch(res){
+            case(#ok(data)){
+                switch(data){
+                  case(#Success(_)){
+                    //TODO: Add to communities
+                    //Map.set(botModel.groups, thash, communityCanisterId, ());
+                    #ok("OK")
+                  };
+                  case(#AlreadyInCommunity(_)){
+                    #err("Already in community")
+                  };
+                  case(#GateCheckFailed(_)){
+                    #err("GateCheckFailed")
+                  };
+                  case(#NotInvited){
+                    #err("NotInvited")
+                  };
+                  case(#UserBlocked){
+                    #err("UserBlocked")
+                  };
+
+                  case(#MemberLimitReached(limit)){
+                    #err("MemberLimitReached")
+                  };
+                  case(#CommunityFrozen){
+                    #err("CommunityFrozen")
+                  };
+                  case(#InternalError(e)){
+                    #err("InternalError: " # e)
+                  };
+                };
+            };
+            case(#err(e)){
+              #err(e)
+            }
+          };
+        };
+        case(#err(msg)){
+           #err(msg)
+        }
+      };
+    };
+
     public func sendGroupMessage(groupCanisterId : Text, content : OCApi.MessageContentInitial, threadIndexId : ?Nat32) : async* Result.Result<T.SendMessageResponse, Text>{
       let seed : Nat64 = Nat64.fromIntWrap(Time.now());
       let rng = Prng.Seiran128();
@@ -231,7 +307,7 @@ module {
     };
 
     func lookupLocalUserIndex(group: Text) : async* Result.Result<Principal, Text> {
-      let res = await* ocService.publicSummary(group, { invite_code = null});
+      let res = await* ocService.publicGroupSummary(group, { invite_code = null});
       switch(res){
         case(#ok(data)){
         switch(data){
@@ -272,7 +348,7 @@ module {
     };
 
     public func getLatestGroupMessageIndex(groupCanisterId : Text) : async* ?OCApi.MessageIndex{
-     let #ok(res) = await* ocService.publicSummary(groupCanisterId, { invite_code = null})
+     let #ok(res) = await* ocService.publicGroupSummary(groupCanisterId, { invite_code = null})
      else {
       return null;
      };

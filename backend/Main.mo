@@ -77,17 +77,21 @@ shared ({ caller }) actor class OCBot() = Self {
     await* ocService.sendChannelMessage("x5c7v-eyaaa-aaaar-bfcca-cai", 55969945094658563960039470874366039185, "test_bot", null, #Text({text = "Test"}), id,  null)
   };
 
-  public func testJoinCommunity() : async Result.Result<OCApi.JoinCommunityResponse, Text>{
-    await* ocService.joinCommunity("x5c7v-eyaaa-aaaar-bfcca-cai", {
-      user_id = Principal.fromActor(Self);
-      principal= Principal.fromActor(Self);
+  public func testUserSummary(userId : ?Principal, username : ?Text) : async Result.Result<OCApi.UserSummaryResponse, Text>{
+    await* ocService.userSummary("4bkt6-4aaaa-aaaaf-aaaiq-cai", {userId = userId; username= username});
+  };
+
+  public func testJoinCommunity(communityCanisterId : Text, inviteCode : ?Nat64) : async Result.Result<Text, Text>{
+    await* botService.joinCommunity(communityCanisterId : Text, inviteCode : ?Nat64);
+  };
+
+
+  public func testCommunitySummary() : async Result.Result<OCApi.CommunitySummaryResponse, Text>{
+    await* ocService.publicCommunitySummary("x5c7v-eyaaa-aaaar-bfcca-cai", {
       invite_code= null;
-      is_platform_moderator = false;
-      is_bot= true;
-      diamond_membership_expires_at= null;
-      verified_credential_args=null;
     });
   };
+
 
 
   public func testListProposals(start : Nat) : async Result.Result<Nat, Text>{

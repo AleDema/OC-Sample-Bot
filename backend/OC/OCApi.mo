@@ -1534,18 +1534,7 @@ module {
     #ThreadMessageNotFound;
     #ReplicaNotUpToDateV2: TimestampMillis;
   };
-
-  //Actors
-
-  public type UserIndexCanister = actor {
-    c2c_register_bot : ({username : Text; display_name : ?Text}) -> async InitializeBotResponse;
-  };
-
-  public type LocalUserIndexCanister = actor {
-    join_group : (JoinGroupArgs) -> async JoinGroupResponse;
-  };
-
-  public type SendChannelMessageArgs = {
+    public type SendChannelMessageArgs = {
    channel_id: ChannelId;
    thread_root_message_index: ?MessageIndex;
    message_id: MessageId;
@@ -1567,7 +1556,30 @@ public type  VerifiedCredentialGateArgs = {
   ii_origin: Text;
 };
 
+public type TransferFromError =  {
+    #BadFee : { expected_fee: Nat };
+    #BadBurn : { min_burn_amount: Nat };
+    #InsufficientFunds :  { balance: Nat };
+    #InsufficientAllowance : { allowance: Nat };
+    #TooOld;
+    #CreatedInFuture :{ ledger_time: Nat64 };
+    #Duplicate :{ duplicate_of: Nat };
+    #TemporarilyUnavailable;
+    #GenericError:  { error_code: Nat; message: Text };
+};
+
+type GateCheckFailedReason = {
+    #NotDiamondMember;
+    #NoSnsNeuronsFound;
+    #NoSnsNeuronsWithRequiredStakeFound;
+    #NoSnsNeuronsWithRequiredDissolveDelayFound;
+    #PaymentFailed: TransferFromError;
+    #InsufficientBalance : Nat;
+    #FailedVerifiedCredentialCheck : Text;
+};
+
  public type JoinCommunityArgs = {
+    community_id : CommunityId;
     user_id: UserId;
     principal: Principal;
     invite_code: ?Nat64;
@@ -1578,15 +1590,37 @@ public type  VerifiedCredentialGateArgs = {
   };
 
  public type JoinCommunityResponse = {
-    #Success;
-    #AlreadyInCommunity;
-    #GateCheckFailed;
+    #Success : CommunityCanisterCommunitySummary;
+    #AlreadyInCommunity : CommunityCanisterCommunitySummary;
+    #GateCheckFailed : GateCheckFailedReason;
     #NotInvited;
     #UserBlocked;
     #MemberLimitReached : Nat32;
     #CommunityFrozen;
     #InternalError : Text;
 };
+
+public type CommunitySummaryResponse={
+    #Success : CommunityCanisterCommunitySummary;
+    #PrivateCommunity;
+};
+
+public type UserSummaryResponse = {
+  #Success : UserSummary;
+  #UserNotFound;
+};
+
+
+  //Actors
+
+  public type UserIndexCanister = actor {
+    c2c_register_bot : ({username : Text; display_name : ?Text}) -> async InitializeBotResponse;
+    user: query ({user_id : ?UserId; username : ?Text}) -> async UserSummaryResponse;
+  };
+
+  public type LocalUserIndexCanister = actor {
+    join_group : (JoinGroupArgs) -> async JoinGroupResponse;
+  };
 
   public type GroupIndexCanister = actor {
      public_summary : query ({invite_code : ?Nat64;}) -> async {
@@ -1601,6 +1635,7 @@ public type  VerifiedCredentialGateArgs = {
   public type CommunityIndexCanister = actor {
     send_message : (SendChannelMessageArgs) -> async (SendMessageResponse);
     join_community : (JoinCommunityArgs) -> async (JoinCommunityResponse);
+    summary : query ({invite_code: ?Nat64}) -> async (CommunitySummaryResponse);
   };
 
 }
