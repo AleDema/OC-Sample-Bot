@@ -69,12 +69,12 @@ shared ({ caller }) actor class OCBot() = Self {
     }
   };
 
-  public func testSendChannelMessage() : async Result.Result<OCApi.SendMessageResponse, Text>{
+  public func testSendChannelMessage(communityCanisterId : Text, channelId : Nat) : async Result.Result<OCApi.SendMessageResponse, Text>{
     let seed : Nat64 = Nat64.fromIntWrap(Time.now());
     let rng = Prng.Seiran128();
     rng.init(seed);
     let id = Nat64.toNat(rng.next());
-    await* ocService.sendChannelMessage("x5c7v-eyaaa-aaaar-bfcca-cai", 55969945094658563960039470874366039185, "test_bot", null, #Text({text = "Test"}), id,  null)
+    await* ocService.sendChannelMessage(communityCanisterId, channelId, "test_bot", null, #Text({text = "Test"}), id,  null)
   };
 
   public func testUserSummary(userId : ?Principal, username : ?Text) : async Result.Result<OCApi.UserSummaryResponse, Text>{
@@ -85,6 +85,9 @@ shared ({ caller }) actor class OCBot() = Self {
     await* botService.joinCommunity(communityCanisterId : Text, inviteCode : ?Nat64);
   };
 
+  public func testJoinChannel(communityCanisterId : Text, channelId : Nat, inviteCode : ?Nat64) : async Result.Result<Text, Text>{
+    await* botService.joinChannel(communityCanisterId : Text,  channelId, inviteCode : ?Nat64);
+  };
 
   public func testCommunitySummary() : async Result.Result<OCApi.CommunitySummaryResponse, Text>{
     await* ocService.publicCommunitySummary("x5c7v-eyaaa-aaaar-bfcca-cai", {

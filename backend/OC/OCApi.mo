@@ -1589,11 +1589,39 @@ type GateCheckFailedReason = {
     verified_credential_args:?VerifiedCredentialGateArgs;
   };
 
+   public type JoinChannelArgs = {
+    community_id : CommunityId;
+    channel_id : ChannelId;
+    user_id: UserId;
+    principal: Principal;
+    invite_code: ?Nat64;
+    is_platform_moderator: Bool;
+    is_bot: Bool;
+    diamond_membership_expires_at: ?Int;
+    verified_credential_args:?VerifiedCredentialGateArgs;
+  };
+
+
  public type JoinCommunityResponse = {
     #Success : CommunityCanisterCommunitySummary;
     #AlreadyInCommunity : CommunityCanisterCommunitySummary;
     #GateCheckFailed : GateCheckFailedReason;
     #NotInvited;
+    #UserBlocked;
+    #MemberLimitReached : Nat32;
+    #CommunityFrozen;
+    #InternalError : Text;
+};
+
+ public type JoinChannelResponse = {
+    #Success : CommunityCanisterChannelSummary;
+    #SuccessJoinedCommunity : CommunityCanisterCommunitySummary;
+    #AlreadyInChannel : CommunityCanisterCommunitySummary;
+    #GateCheckFailed : GateCheckFailedReason;
+    #UserNotInCommunity;
+    #ChannelNotFound;
+    #NotInvited;
+    #UserSuspended;
     #UserBlocked;
     #MemberLimitReached : Nat32;
     #CommunityFrozen;
@@ -1635,6 +1663,7 @@ public type UserSummaryResponse = {
   public type CommunityIndexCanister = actor {
     send_message : (SendChannelMessageArgs) -> async (SendMessageResponse);
     join_community : (JoinCommunityArgs) -> async (JoinCommunityResponse);
+    join_channel : (JoinChannelArgs) -> async (JoinChannelResponse);
     summary : query ({invite_code: ?Nat64}) -> async (CommunitySummaryResponse);
   };
 

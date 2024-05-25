@@ -134,6 +134,16 @@ public class OCServiceImpl() {
       }
     };
 
+    public func joinChannel(communityCanisterId : Text, args : OCApi.JoinChannelArgs) : async* Result.Result<OCApi.JoinChannelResponse, Text> {
+      try{
+        let communityIndexCanister : OCApi.CommunityIndexCanister = actor (communityCanisterId);
+        let res = await communityIndexCanister.join_channel(args);
+        #ok(res);
+      } catch(e){
+        return #err(Error.message(e))
+      }
+    };
+
     public func messagesByMessageIndex(groupCanisterId : Text, args : OCApi.MessagesByMessageIndexArgs) : async* Result.Result<OCApi.MessagesByMessageIndexResponse, Text>{
       try{
         let group_canister : OCApi.GroupIndexCanister = actor (groupCanisterId);

@@ -210,6 +210,77 @@ module {
       };
     };
 
+    public func joinChannel(communityCanisterId : Text, channelId: Nat, inviteCode : ?Nat64) : async* Result.Result<Text, Text>{
+      let indexCanister = await* localCommunityIndex(communityCanisterId);
+      switch(indexCanister){
+        case(#ok(id)){
+          let res = await* ocService.joinChannel(Principal.toText(id), {
+            community_id = Principal.fromText(communityCanisterId);
+            channel_id = channelId;
+            user_id = Principal.fromText("7g2oq-raaaa-aaaap-qb7sq-cai");
+            principal= Principal.fromText("7g2oq-raaaa-aaaap-qb7sq-cai");
+            invite_code= inviteCode;
+            is_platform_moderator = false;
+            is_bot= true;
+            diamond_membership_expires_at= null;
+            verified_credential_args=null;
+          });
+          switch(res){
+            case(#ok(data)){
+                switch(data){
+                  case(#Success(_)){
+                    //TODO: Add to communities
+                    //Map.set(botModel.groups, thash, communityCanisterId, ());
+                    #ok("OK")
+                  };
+                  case(#SuccessJoinedCommunity(_)){
+                    //TODO: Add to communities
+                    //Map.set(botModel.groups, thash, communityCanisterId, ());
+                    #ok("OK")
+                  };
+                  case(#AlreadyInChannel(_)){
+                    #err("Already in community")
+                  };
+                  case(#GateCheckFailed(_)){
+                    #err("GateCheckFailed")
+                  };
+                  case(#NotInvited){
+                    #err("NotInvited")
+                  };
+                  case(#UserBlocked){
+                    #err("UserBlocked")
+                  };
+                  case(#UserSuspended){
+                    #err("UserSuspended")
+                  };
+                  case(#UserNotInCommunity){
+                    #err("UserNotInCommunity")
+                  };
+                  case(#ChannelNotFound){
+                    #err("UserNotInCommunity")
+                  };
+                  case(#MemberLimitReached(limit)){
+                    #err("MemberLimitReached")
+                  };
+                  case(#CommunityFrozen){
+                    #err("CommunityFrozen")
+                  };
+                  case(#InternalError(e)){
+                    #err("InternalError: " # e)
+                  };
+                };
+            };
+            case(#err(e)){
+              #err(e)
+            }
+          };
+        };
+        case(#err(msg)){
+           #err(msg)
+        }
+      };
+    };
+
     public func sendGroupMessage(groupCanisterId : Text, content : OCApi.MessageContentInitial, threadIndexId : ?Nat32) : async* Result.Result<T.SendMessageResponse, Text>{
       let seed : Nat64 = Nat64.fromIntWrap(Time.now());
       let rng = Prng.Seiran128();

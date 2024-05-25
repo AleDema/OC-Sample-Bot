@@ -19,7 +19,8 @@ module {
     editGroupMessage : (groupCanisterId :Text, messageId : OCApi.MessageId, newContent : OCApi.MessageContentInitial) -> async* Result.Result<OCApi.EditMessageResponse, Text>;
     messagesByMessageIndex : (Text, OCApi.MessagesByMessageIndexArgs) -> async* Result.Result<OCApi.MessagesByMessageIndexResponse, Text>;
     sendChannelMessage : (communityCanisterId : Text, channelId : Nat, sender : Text, senderDisplayName : ?Text, content : OCApi.MessageContent, messageId : Nat,  threadIndexId : ?Nat32) -> async* Result.Result<OCApi.SendMessageResponse, Text>;
-    joinCommunity : (communityCanisterId : Text, args : OCApi.JoinCommunityArgs) -> async* Result.Result<OCApi.JoinCommunityResponse, Text> 
+    joinCommunity : (communityCanisterId : Text, args : OCApi.JoinCommunityArgs) -> async* Result.Result<OCApi.JoinCommunityResponse, Text>;
+    joinChannel : (channelCanisterId : Text, args : OCApi.JoinChannelArgs) -> async* Result.Result<OCApi.JoinChannelResponse, Text>;
   };
 
 }
