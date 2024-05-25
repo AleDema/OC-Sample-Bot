@@ -13,6 +13,9 @@ import Iter "mo:base/Iter";
 import Option "mo:base/Option";
 import Int "mo:base/Int";
 import Array "mo:base/Array";
+import Timer "mo:base/Timer";
+import Int32 "mo:base/Int32";
+import Int64 "mo:base/Int64";
 import Map "mo:map/Map";
 import T "./Types";
 import TU "./TextUtils";
@@ -20,480 +23,265 @@ import G "./Guards";
 import OC "./OCTypes";
 import MT "./MetricTypes";
 import F "./Fixtures";
-
+import TT "./TrackerTypes";
+import LS "./Log/LogService";
+import LT "./Log/LogTypes";
+import {  nhash; n64hash; n32hash; thash } "mo:map/Map";
+import BT "./OC/BotTypes";
+import BS "./OC/BotService";
+import OCS "./OC/OCService";
+import OCApi "./OC/OCApi";
+import GS "./Governance/GovernanceService";
+import GT "./Governance/GovernanceTypes";
+import PS "./Proposal/ProposalService";
+import PB "./ProposalBot/ProposalBot";
+import DateTime "mo:datetime/DateTime";
+import Prng "mo:prng";
 shared ({ caller }) actor class OCBot() = Self {
 
-  //TODOs:
-  // set avatar
-
-  let TEST_MODE = true;
-
-  let USER_INDEX_CANISTER = "4bkt6-4aaaa-aaaaf-aaaiq-cai";
-  let LOCAL_USER_INDEX_ID = "nq4qv-wqaaa-aaaaf-bhdgq-cai";
-  let GROUP_INDEX_ID = "4ijyc-kiaaa-aaaaf-aaaja-cai";
   let NNS_PROPOSAL_GROUP_ID = "labxu-baaaa-aaaaf-anb4q-cai";
   let TEST_GROUP_ID = "evg6t-laaaa-aaaar-a4j5q-cai";
-  let BOT_REGISTRATION_FEE: Nat = 10_000_000_000_000; // 10T
-
-  let { nhash; n64hash; n32hash } = Map;
 
   stable var custodians = List.make<Principal>(caller);
-  stable var groups = List.nil<Principal>();
-  stable var activeProposals = Map.new<OC.ProposalId, OC.MessageId>();
-  stable var botStatus : T.BotStatus = #NotInitialized;
-  stable var botName : Text = "";
-  stable var botDisplayName : ?Text = null;
-  stable var lastMessageID : Nat = 0; //TODO: reconsider
 
-  stable var latestMessageIndex = 0;
-  stable var latestProposalID = 0;
+  stable let logs = LS.initLogModel();
+  let logService = LS.LogServiceImpl(logs, 100, true);
 
+  stable let botData = BS.initModel();
+  let ocService = OCS.OCServiceImpl();
+  let botService = BS.BotServiceImpl(botData, ocService, logService);
 
-  public shared({caller}) func initBot(name : Text, displayName : ?Text) : async Result.Result<Text, Text>{
+  let governanceService = GS.GovernanceService();
+  let proposalService = PS.ProposalService(governanceService, logService);
+
+  stable let proposalBotData = PB.initModel();
+  let proposalBot= PB.ProposalBot(proposalBotData, botService, proposalService, logService);
+
+  //////////////////////////
+  ////////////////// PROPOSAL BOT
+  //////////////////////////
+
+  system func postupgrade() {
+    if(Option.isSome(proposalBotData.timerId)){
+        proposalBotData.timerId := ?Timer.recurringTimer<system>(#seconds(5* 6), func() : async () {
+        await proposalBot.update(proposalBotData.lastProposalId);
+        });
+    }
+  };
+
+  public func testSendChannelMessage(communityCanisterId : Text, channelId : Nat, text : Text) : async Result.Result<OCApi.SendMessageResponse, Text>{
+    let seed : Nat64 = Nat64.fromIntWrap(Time.now());
+    let rng = Prng.Seiran128();
+    rng.init(seed);
+    let id = Nat64.toNat(rng.next());
+    await* ocService.sendChannelMessage(communityCanisterId, channelId, "test_bot", null, #Text({text = text}), id,  null)
+  };
+
+  public func testUserSummary(userId : ?Principal, username : ?Text) : async Result.Result<OCApi.UserSummaryResponse, Text>{
+    await* ocService.userSummary("4bkt6-4aaaa-aaaaf-aaaiq-cai", {userId = userId; username= username});
+  };
+
+  public func testJoinCommunity(communityCanisterId : Text, inviteCode : ?Nat64) : async Result.Result<Text, Text>{
+    await* botService.joinCommunity(communityCanisterId : Text, inviteCode : ?Nat64);
+  };
+
+  public func testJoinChannel(communityCanisterId : Text, channelId : Nat, inviteCode : ?Nat64) : async Result.Result<Text, Text>{
+    await* botService.joinChannel(communityCanisterId : Text,  channelId, inviteCode : ?Nat64);
+  };
+
+  public func testCommunitySummary() : async Result.Result<OCApi.CommunitySummaryResponse, Text>{
+    await* ocService.publicCommunitySummary("x5c7v-eyaaa-aaaar-bfcca-cai", {
+      invite_code= null;
+    });
+  };
+
+  public func testListProposals(start : Nat) : async Result.Result<Nat, Text>{
+   let res = await* proposalService.listProposalsAfterd("rrkah-fqaaa-aaaaa-aaaaq-cai", ?start, {PS.ListProposalArgsDefault() with omitLargeFields = ?true});
+
+    switch(res){
+      case(#ok(data)){
+       #ok(Array.size(data.proposal_info));
+      };
+      case(#err(err)){
+       #err(err)
+      }
+    }
+  };
+
+  public func initTimer<system>(_tickrateInSeconds : ?Nat) : async Result.Result<(), Text> {
+      await proposalBot.initTimer(_tickrateInSeconds);
+  };
+
+  public func cancelTimer() : async Result.Result<(), Text> {
     if (not G.isCustodian(caller, custodians)) {
       return #err("Not authorized");
     };
 
-    switch(botStatus){
-      case(#NotInitialized){
-        botStatus := #Initializing;
-
-        Cycles.add(BOT_REGISTRATION_FEE);
-        let user_index : OC.UserIndexCanister = actor (USER_INDEX_CANISTER);
-        try{
-          let res = await user_index.c2c_register_bot({username= name; display_name= displayName});
-
-          switch (res){
-            case (#Success or #AlreadyRegistered){
-
-              botStatus := #Initialized;
-              botName := name;
-              botDisplayName := displayName;
-              return #ok("Initialized");
-            };
-            case (#InsufficientCyclesProvided(n)) {
-              botStatus := #NotInitialized;
-              return #err("Not enough cycles. Required: " # Nat.toText(n));
-            };
-            case(_){
-              botStatus := #NotInitialized;
-              return #err("Error")
-            };
-          };
-          botStatus := #Initialized;
-          return #ok("Initialized")
-          } catch(e){
-            botStatus := #NotInitialized;
-            return #err("Trapped")
-          }
-      };
-      case(#Initializing){
-        return #err("Initializing")
-      };
-      case(#Initialized){
-        return #err("Initialized")
-      }
-    }
+    await proposalBot.cancelTimer();
   };
 
-  func joinGroup(groupCanisterId : T.TextPrincipal, inviteCode : ?Nat64) : async* Result.Result<Text, Text>{
-
-    let indexCanister = await* lookupLocalUserIndex(groupCanisterId);
-
-    switch(indexCanister){
-      case(#ok(id)){
-        let localIndexCanister : OC.LocalUserIndexCanister = actor (Principal.toText(id));
-        let res = await localIndexCanister.join_group({ chat_id= Principal.fromText(groupCanisterId); invite_code= inviteCode; correlation_id =  0});
-        switch(res){
-          case(#Success(_)){
-            groups := List.push(Principal.fromText(groupCanisterId), groups);
-            #ok("OK")
-          };
-          case(#AlreadyInGroup or #AlreadyInGroupV2(_)){
-            #err("Already in group")
-          };
-          case(_){
-            #err("Error")
-          }
-        }
-      };
-       case (#err(response)){
-        return #err("Lookup error");
-      }
-    }
+  public func update(start : ?Nat) : async () {
+    await proposalBot.update(start);
   };
 
-  func lookupLocalUserIndex(group: T.TextPrincipal) : async* Result.Result<Principal, OC.GroupLookupResponse> {
-    let group_canister : OC.GroupIndexCanister = actor (group);
-    let res = await group_canister.public_summary({ invite_code = null});
+  //////////////////////////
+  ////////////////// TEST ENDPOINTS
+  //////////////////////////
 
-    switch(res){
-      case (#Success(response)){
-        #ok(response.summary.local_user_index_canister_id)
-      };
-      case (#NotAuthorized(_)){
-        #err(#GroupNotFound)
-      };
-    }
+  public func testDate(secs : Int) : async Text{
+    let fmt = "YYYY-MM-DD HH:mm";
+    let date = DateTime.DateTime(secs * 1_000_000_000); //secs to nano
+    DateTime.toTextAdvanced(date, #custom({format = fmt; locale = null}))
   };
 
 
-  func sendMessageToGroup(groupCanisterId : T.TextPrincipal, content : OC.MessageContentInitial, threadIndexId : ?Nat32) : async* T.SendMessageResponse{
-      let group_canister : OC.GroupIndexCanister = actor (groupCanisterId);
-      lastMessageID := lastMessageID + 1;
-      let msgIdCls = lastMessageID;
-      let res = await group_canister.send_message_v2({
-        message_id = lastMessageID;
-        thread_root_message_index = threadIndexId;
-        content = content;
-        sender_name = botName;
-        sender_display_name = botDisplayName;
-        replies_to =  null;
-        mentioned = [];
-        forwarding = false;
-        rules_accepted=  null;
-        message_filter_failed = null;
-        correlation_id= 0;
-      });
-      switch(res){
-        case(#Success(response)){
-          #Success({ response with message_id = msgIdCls;})
-        };
-        case(#ChannelNotFound){
-          #ChannelNotFound
-        };
-        case(#ThreadMessageNotFound){
-          #ThreadMessageNotFound
-        };
-        case(#MessageEmpty){
-          #MessageEmpty
-        };
-        case(#TextTooLong(n)){
-          #TextTooLong(n)
-        };
-        case(#InvalidPoll(reason)){
-          #InvalidPoll(reason) 
-        };
-        case(#NotAuthorized){
-          #NotAuthorized
-        };
-        case(#UserNotInCommunity){
-          #UserNotInCommunity
-        };
-        case(#UserNotInChannel){
-          #UserNotInChannel
-        };
-        case(#UserSuspended){
-          #UserSuspended
-        };
-        case(#InvalidRequest(reason)){
-          #InvalidRequest(reason)
-        };
-        case(#CommunityFrozen){
-          #CommunityFrozen
-        };
-        case(#RulesNotAccepted){
-          #RulesNotAccepted
-        };
-        case(#CommunityRulesNotAccepted){
-          #CommunityRulesNotAccepted
-        };
-
-      };
+  //////////////////PROPOSAL BOT
+  public func testSetLastProposalId(proposalId : Nat) : async () {
+    proposalBotData.lastProposalId := ?proposalId;
   };
 
-  func sendTextMessageToGroup(groupCanisterId : T.TextPrincipal, content : Text, threadIndexId : ?Nat32) : async* T.SendMessageResponse{
-    await* sendMessageToGroup(groupCanisterId, #Text({text = content}), threadIndexId);
+  public func testGetLastProposalId() : async ?Nat {
+    proposalBotData.lastProposalId
   };
 
-  func editGroupMessage(groupCanisterId : T.TextPrincipal, messageId : OC.MessageId, newContent : OC.MessageContentInitial) : async* OC.EditMessageResponse{
-      let group_canister : OC.GroupIndexCanister = actor (groupCanisterId);
-      let res = await group_canister.edit_message_v2({
-        message_id = messageId;
-        thread_root_message_index = null;
-        content = newContent;
-        correlation_id= 0;
-      });
-
-     res
+  public func testGetPendingList() : async ([TT.ProposalAPI], Nat, Nat){
+    (List.toArray(proposalBotData.pendingSCMList), proposalBotData.numberOfTicksSinceUpdate, List.size(proposalBotData.pendingSCMList))
   };
 
-  func editTextGroupMessage(groupCanisterId : T.TextPrincipal, messageId : OC.MessageId, newContent : Text) : async* OC.EditMessageResponse{
-    await* editGroupMessage(groupCanisterId, messageId, #Text({text = newContent}));
+  public func testClearPendingList() : async (){
+    proposalBotData.pendingSCMList := List.nil<TT.ProposalAPI>();
   };
 
-  func getGroupMessagesByIndex(groupCanisterId : T.TextPrincipal, indexes : [Nat32] ,latest_known_update : ?Nat64) : async* Result.Result<OC.MessagesResponse, Text> {
-    let group_canister : OC.GroupIndexCanister = actor (groupCanisterId);
-    let res = await group_canister.messages_by_message_index({
-      thread_root_message_index = null;
-      messages = indexes;
-      latest_known_update = latest_known_update;
-    });
-
-    switch(res){
-      case(#Success(val)){
-        #ok(val);
-      };
-      case(_){
-        return #err("Error")
-      };
-    }
+  public func testGetProposalsLookup() : async [(Nat, {proposalData : TT.ProposalAPI; messageIndex : ?Nat32; attempts : Nat})] {
+    Map.toArray(proposalBotData.proposalsLookup);
   };
 
-  func getNNSProposalMessageData(message : OC.MessageEventWrapper) : Result.Result<{proposalId : OC.ProposalId; messageIndex : OC.MessageIndex}, Text>{
-    let event = message.event;
-    switch(event.content){
-      case(#GovernanceProposal(p)){
-        switch(p.proposal){
-          case(#NNS(proposal)){
-            return #ok({
-              proposalId = proposal.id;
-              messageIndex = event.message_index;
-            })
-          };
-          case(#SNS(_)){
-            return #err("Not a NNS proposal");
-          };
-        }
-      };
-      case(_){
-        return #err("Not a governance proposal");
-      }
-    }
+  public func testClearProposalsLookup() : async (){
+    Map.clear(proposalBotData.proposalsLookup);
   };
 
-  func getLatestMessageIndex(groupCanisterId : T.TextPrincipal) : async* ?OC.MessageIndex{
-    let group_canister : OC.GroupIndexCanister = actor (groupCanisterId);
-    let res = await group_canister.public_summary({
-      invite_code = null;
-      correlation_id = 0;
-    });
-
-    switch(res){
-      case(#Success(val)){
-        return val.summary.latest_message_index;
-      };
-      case(_){
-        return null;
-      };
-    };
+  public func testGetLatestNNSMessageIndex() : async?Nat32{
+    proposalBotData.latestNNSMessageIndex;
   };
 
-  let messageRange : Nat32 = 10;
-  // Attempt to send messages for new proposals and register the corresponding message ID in the associative map.
-  // To keep payload size at a minimum it retrieves 10 messages at a time for a max of maxRetries.
-  func trySendMessages( tallies : [T.TallyData]) : async* Result.Result<Text, Text> {
+  public func testSetLatestNNSMessageIndex(index :?Nat32) : async (){
+    proposalBotData.latestNNSMessageIndex := index;
+  };
 
-    var index = switch(await* getLatestMessageIndex(NNS_PROPOSAL_GROUP_ID)){
-      case(?index){index};
-      case(_){return #err("Error")};
+  public func testResetState() : async (){
+    proposalBotData.pendingSCMList := List.nil<TT.ProposalAPI>();
+    Map.clear(proposalBotData.proposalsLookup);
+    proposalBotData.latestNNSMessageIndex := null;
+  };
+
+  ////////////////// OC API
+
+  public func getBotStatus() : async BT.BotStatus {
+    botService.getBotStatus();
+  };
+
+  public func setBotStatus() {
+    botService.setBotStatus();
+  };
+
+  // public shared({caller}) func joinTestGroup() : async Result.Result<Text, Text>{
+  //   if (not G.isCustodian(caller, custodians)) {
+  //     return #err("Not authorized: " # Principal.toText(caller));
+  //   };
+
+  //   await* botService.joinGroup(TEST_GROUP_ID, null);
+  // };
+
+  // public shared({caller}) func testJoinGroup(groupCanisterId : T.TextPrincipal) : async Result.Result<Text, Text>{
+  //   if (not G.isCustodian(caller, custodians)) {
+  //     return #err("Not authorized: " # Principal.toText(caller));
+  //   };
+  //   await* botService.joinGroup(groupCanisterId, null);
+  // };
+
+  // public shared({caller}) func testSendMessage(content : Text) : async Result.Result<T.SendMessageResponse, Text>{
+  //   if (not G.isCustodian(caller, custodians)) {
+  //     return #err("Not authorized: " # Principal.toText(caller));
+  //   };
+
+  //   let #ok(res) = await* botService.sendTextGroupMessage(TEST_GROUP_ID, content, null)
+  //   else {
+  //    return #err("Error sending message");
+  //   };
+  //   #ok(res)
+  // };
+
+  // public shared({caller}) func testSendMessageThread(content : Text, threadIndexId : Nat32) : async Result.Result<T.SendMessageResponse, Text>{
+  //   if (not G.isCustodian(caller, custodians)) {
+  //     return #err("Not authorized: " # Principal.toText(caller));
+  //   };
+
+  //   let #ok(res) = await* botService.sendTextGroupMessage(TEST_GROUP_ID, content, ?threadIndexId)
+  //   else {
+  //     return #err("Error sending message in thread");
+  //   };
+  //   #ok(res)
+  // };
+
+  // public shared({caller}) func testEditMessage(messageId : Nat, newContent : Text) : async Result.Result<OC.EditMessageResponse, Text>{
+  //   if (not G.isCustodian(caller, custodians)) {
+  //     return #err("Not authorized: " # Principal.toText(caller));
+  //   };
+
+  //   let #ok(res) = await*  botService.editTextGroupMessage(TEST_GROUP_ID, messageId, newContent)
+  //   else{
+  //     return #err("Error editing message");
+  //   };
+  //   #ok(res)
+  // };
+
+  // public shared({caller}) func testGetMessages(indexes : [Nat32]) : async Result.Result<OC.MessagesResponse, Text>{
+  //   if (not G.isCustodian(caller, custodians)) {
+  //     return #err("Not authorized: " # Principal.toText(caller));
+  //   };
+
+  //   await*  botService.getGroupMessagesByIndex(TEST_GROUP_ID, indexes, ?0);
+  // };
+
+  // public shared({caller}) func testGetNNSProposals(indexes : [Nat32]) : async Result.Result<OC.MessagesResponse, Text>{
+  //   // if (not G.isCustodian(caller, custodians)) {
+  //   //   return #err("Not authorized: " # Principal.toText(caller));
+  //   // };
+
+  //   await*  botService.getGroupMessagesByIndex(NNS_PROPOSAL_GROUP_ID, indexes, ?0);
+  // };
+
+  // public shared({caller}) func testGetProposalsGroupLastId() : async Result.Result<OC.MessageIndex, Text>{
+  //   if (not G.isCustodian(caller, custodians)) {
+  //     return #err("Not authorized: " # Principal.toText(caller));
+  //   };
+  //   var index = switch(await* botService.getLatestGroupMessageIndex(NNS_PROPOSAL_GROUP_ID)){
+  //     case(?index){index};
+  //     case(_){return #err("Error")};
+  //   };
+
+  //   return #ok(index)
+  // };
+
+  
+  public func testRange(start: Int, end: Nat) : async Result.Result<([OC.MessageEventWrapper], [Nat32]), ()>{
+    let indexVec = Iter.range(end, start) |> 
+                      Iter.map(_, func (n : Nat) : Nat32 {Nat32.fromNat(n)}) |> 
+                        Iter.toArray(_);
+
+    let #ok(res) = await* botService.getGroupMessagesByIndex(NNS_PROPOSAL_GROUP_ID, indexVec, null)
+    else {
+      //Error retrieving messages
+      logService.addLog(#Error, "[testRange] Error retrieving messages", null);
+      return #err();
     };
 
-    var _tallies = tallies;
-
-    //TODO: compromise cross canister calls with increased payload size?
-    var maxRetries = 3;
-    label attempts while (maxRetries > 0){
-      maxRetries := maxRetries - 1;
-
-      //generate ranges for message indexes to fetch
-      let indexVec = Iter.range(Nat32.toNat(index) - Nat32.toNat(messageRange) , Nat32.toNat(index)) |> 
-                        Iter.map(_, func (n : Nat) : Nat32 {Nat32.fromNat(n)}) |> 
-                          Iter.toArray(_);
-    
-
-      let #ok(res) = await* getGroupMessagesByIndex(NNS_PROPOSAL_GROUP_ID, indexVec, null)
-      else {
-        //Error retrieving messages
-        continue attempts;
-      };
-
-      label messages for (message in res.messages.vals()){ 
-        let #ok(proposalData) = getNNSProposalMessageData(message)
-        else {
-           //This shouldn't happen unless OC changes something
-           //TODO: log
-           continue messages;
-        };
-        let exists = Array.find<T.TallyData>(_tallies, func (t : T.TallyData) : Bool {
-          return proposalData.proposalId == t.proposalId;
-        });
-
-
-        let tally = switch(exists){
-          case(?t){t};
-          case(_){
-            continue messages;
-          };
-        };
-
-        var group_id = NNS_PROPOSAL_GROUP_ID;
-        if (TEST_MODE){group_id := TEST_GROUP_ID};
-
-        var messageIndex = ?proposalData.messageIndex;
-
-        if(TEST_MODE){messageIndex := null};
-
-        let res = await* sendTextMessageToGroup(group_id, TU.formatMessage(tally), messageIndex);
-
-        switch (res){
-          case(#Success(msgData)){
-            //remove from tallies
-            _tallies := Array.filter(_tallies, func(n : T.TallyData) : Bool {
-              return n.proposalId != tally.proposalId;
-            });
-
-            //handle edge case where a proposal is settled on the first send, it won;t be updated so there is no need to add to the map
-            switch(tally.proposalStatus){
-              case(#Pending){
-                //Dont save to hashmap in testmode for now
-                if(not TEST_MODE){
-                  Map.set(activeProposals, n64hash, proposalData.proposalId, msgData.message_id);
-                }
-              };
-              case(_){};
-            }
-          };
-          case(_){ //TODO: log error
-          };
-        };
-      };
-
-      index := index - messageRange;
-      //return early if all tallies are matched
-      if ((Array.size(_tallies) == 0)){
-        return #ok("Tallies updated 2");
-      };
-    };
-
-    var notFound = "";
-    for(i in _tallies.vals()){
-      notFound := notFound # Nat64.toText(i.proposalId) # " ";
-    };
-
-    //TODO: log unmatched proposal ids
-     return #err("Max retries reached: Proposals not found: " # notFound);
+    #ok((res.messages, indexVec))
   };
 
-  public shared({caller}) func updateTallies(tallies : [T.TallyData]) : async Result.Result<Text, Text>{
-    if (not G.isCustodian(caller, custodians)) {
-      return #err("Not authorized: " # Principal.toText(caller));
-    };
-
-    var _tallies = tallies;
-    label it for (tally in tallies.vals()){
-      let p = switch(Map.get(activeProposals, n64hash, tally.proposalId)){
-        case(?p){p};
-        case(_){ continue it; };
-      };
-      // edit message
-      let res = await* editTextGroupMessage(NNS_PROPOSAL_GROUP_ID, p, TU.formatMessage(tally));
-      //TODO: log edit errors
-      // if proposal is over, remove from map
-      switch (tally.tallyStatus, tally.proposalStatus){
-        //TODO: reconsider after polling canister design
-        case((#Approved or #Rejected), #Executed(verdict)){
-          Map.delete(activeProposals, n64hash, tally.proposalId);
-        };
-        case(_){};
-      };
-
-      // Remove updated tallies
-      _tallies := Array.filter(_tallies, func(n : T.TallyData) : Bool {
-        return n.proposalId != tally.proposalId;
-      });
-    };
-
-    //at least one proposal is new
-    if (Array.size(_tallies) > 0){
-      return await* trySendMessages(_tallies);
-    };
-    return #ok("Tallies updated 1");
-  };
-
-  //TEST ENDPOINTS
-
-  public shared({caller}) func test() : async Result.Result<Text, Text>{
-    let mock = F.basicMockData();
-    return await updateTallies(mock);
-  };
-
-  public shared({caller}) func test2() : async Result.Result<Text, Text>{
-    let mock = F.wrongMockData();
-    return await updateTallies(mock);
-  };
-
-  public shared({caller}) func joinTestGroup() : async Result.Result<Text, Text>{
-    if (not G.isCustodian(caller, custodians)) {
-      return #err("Not authorized: " # Principal.toText(caller));
-    };
-
-    await* joinGroup(TEST_GROUP_ID, null);
-  };
-
-  public shared({caller}) func testJoinGroup(groupCanisterId : T.TextPrincipal) : async Result.Result<Text, Text>{
-    if (not G.isCustodian(caller, custodians)) {
-      return #err("Not authorized: " # Principal.toText(caller));
-    };
-    await* joinGroup(groupCanisterId, null);
-  };
-
-  public shared({caller}) func testSendMessage(content : Text) : async Result.Result<T.SendMessageResponse, Text>{
-    if (not G.isCustodian(caller, custodians)) {
-      return #err("Not authorized: " # Principal.toText(caller));
-    };
-
-    let res = await* sendTextMessageToGroup(TEST_GROUP_ID, content, null);
-    #ok(res)
-  };
-
-  public shared({caller}) func testSendMessageThread(content : Text, threadIndexId : Nat32) : async Result.Result<T.SendMessageResponse, Text>{
-    if (not G.isCustodian(caller, custodians)) {
-      return #err("Not authorized: " # Principal.toText(caller));
-    };
-
-    let res = await* sendTextMessageToGroup(TEST_GROUP_ID, content, ?threadIndexId);
-    #ok(res)
-  };
-
-  public shared({caller}) func testEditMessage(messageId : Nat, newContent : Text) : async Result.Result<OC.EditMessageResponse, Text>{
-    if (not G.isCustodian(caller, custodians)) {
-      return #err("Not authorized: " # Principal.toText(caller));
-    };
-
-    let res = await* editTextGroupMessage(TEST_GROUP_ID, messageId, newContent);
-    #ok(res)
-  };
-
-  public shared({caller}) func testGetMessages(indexes : [Nat32]) : async Result.Result<OC.MessagesResponse, Text>{
-    if (not G.isCustodian(caller, custodians)) {
-      return #err("Not authorized: " # Principal.toText(caller));
-    };
-
-    await* getGroupMessagesByIndex(TEST_GROUP_ID, indexes, ?0);
-  };
-
-  public shared({caller}) func testGetNNSProposals(indexes : [Nat32]) : async Result.Result<OC.MessagesResponse, Text>{
-    if (not G.isCustodian(caller, custodians)) {
-      return #err("Not authorized: " # Principal.toText(caller));
-    };
-
-    await* getGroupMessagesByIndex(NNS_PROPOSAL_GROUP_ID, indexes, ?0);
-  };
-
-  public shared({caller}) func testGetProposalsGroupLastId() : async Result.Result<OC.MessageIndex, Text>{
-    if (not G.isCustodian(caller, custodians)) {
-      return #err("Not authorized: " # Principal.toText(caller));
-    };
-    var index = switch(await* getLatestMessageIndex(NNS_PROPOSAL_GROUP_ID)){
-      case(?index){index};
-      case(_){return #err("Error")};
-    };
-
-    return #ok(index)
-  };
-
-  // ADMIN //
+  //////////////////////////
+  ////////////////// ADMIN
+  //////////////////////////
   public shared ({ caller }) func addCustodian(new_custodian : Principal) : async Result.Result<Text, Text> {
     if (not G.isCustodian(caller, custodians)) {
       return #err("Not authorized");
@@ -504,7 +292,10 @@ shared ({ caller }) actor class OCBot() = Self {
     return #ok("Custodian Added");
   };
 
-  //METRICS
+  
+  //////////////////////////
+  ////////////////// METRICS
+  //////////////////////////
   public shared({caller}) func getCanisterStatus() : async Result.Result<MT.CanisterStatus, Text> {
     if (not G.isCustodian(caller, custodians)) {
       return #err("Not authorized");
@@ -523,64 +314,19 @@ shared ({ caller }) actor class OCBot() = Self {
     #ok(canister_status)
   };
 
-  //Waiting for OC support
-  // public shared({caller}) func handle_direct_message_msgpack(data : HandleMessageArgs) : async Result.Result<Text, Text>{
-  //   //TODO: validate caller
+  //////////////////////////
+  ////////////////// LOGS
+  //////////////////////////
+  public func getLogs(filter : ?LT.LogFilter) : async [LT.Log] {
+    logService.getLogs(filter);
+  };
 
-  //   let group_canister : T.GroupIndexCanister = actor (TEST_GROUP_ID);
-  //   let res = await group_canister.messages_by_message_index(null, [], null);
+  public func clearLogs() : async Result.Result<(), Text> {
+    if (not G.isCustodian(caller, custodians)) {
+      return #err("Not authorized");
+    };
+    logService.clearLogs();
+    #ok()
+  };
 
-  //   switch(res){
-  //     case(#Success(val)){
-  //       #ok(val.latest_event_index);
-  //     };
-  //     case(_){
-  //       return #err("Error")
-  //     };
-  //   }
-  // };
-
-  // Not supported 
-  // public func sendTestGovernanceMessage() : async T.SendMessageResponse{
-  //     let group_canister : T.GroupIndexCanister = actor (TEST_GROUP_ID);
-  //     let res = await group_canister.send_message_v2({
-  //       message_id = lastMessageID; //TODO: save messageIDs for edits, 3453453
-  //       thread_root_message_index = null;
-  //       content = #GovernanceProposal({    
-  //           my_vote = null;
-  //           governance_canister_id =  Principal.fromText("rrkah-fqaaa-aaaaa-aaaaq-cai");
-  //           proposal =
-  //             #NNS({
-  //                 id = 73327;
-  //                 url =  "Text";
-  //                 status =  #Open;
-  //                 payload_text_rendering =  ?"Test";
-  //                 tally =  {
-  //                     no =  12;
-  //                     yes =  12;
-  //                     total =  24;
-  //                     timestamp =  2222;
-  //                   };
-  //                 title =  "Test title";
-  //                 created =  22;
-  //                 topic =  5;
-  //                 last_updated =  22;
-  //                 deadline =  22;
-  //                 reward_status =  #Settled;
-  //                 summary =  "Text";
-  //                 proposer =  222;
-  //             });
-  //         });
-  //         sender_name = "test_bot";
-  //       sender_display_name = null;
-  //       replies_to =  null;
-  //       mentioned = [];
-  //       forwarding = false;
-  //       rules_accepted=  null;
-  //       message_filter_failed = null;
-  //       correlation_id= 0;
-  //     });
-  //     lastMessageID := lastMessageID + 1;
-  //     res
-  // };
 };

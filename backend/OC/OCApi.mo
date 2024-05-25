@@ -1,3 +1,4 @@
+import Nat64 "mo:base/Nat64";
 // This is a generated Motoko binding.
 // Please use `import service "ic:canister_id"` instead to call canisters on the IC if possible.
 
@@ -1515,7 +1516,7 @@ module {
       summary: PublicGroupSummary
   };
 
-  type MessagesByMessageIndexArgs = {
+  public type MessagesByMessageIndexArgs = {
     thread_root_message_index : ?MessageIndex;
     messages: [MessageIndex];
     latest_known_update: ?Nat64;
@@ -1527,17 +1528,122 @@ module {
     chat_last_updated: TimestampMillis;
   };
 
-  type MessagesByMessageIndexResponse = {
+  public type MessagesByMessageIndexResponse = {
     #Success: MessagesResponse;
     #CallerNotInGroup;
     #ThreadMessageNotFound;
     #ReplicaNotUpToDateV2: TimestampMillis;
   };
+    public type SendChannelMessageArgs = {
+   channel_id: ChannelId;
+   thread_root_message_index: ?MessageIndex;
+   message_id: MessageId;
+   content: MessageContent;
+   sender_name: Text;
+   sender_display_name: ?Text;
+   replies_to: ?GroupReplyContext;
+   mentioned: [User];
+   forwarding: Bool;
+   block_level_markdown: Bool;
+   community_rules_accepted: ?Version;
+   channel_rules_accepted: ?Version;
+   message_filter_failed: ?Nat64;
+};
+
+public type  VerifiedCredentialGateArgs = {
+  user_ii_principal: Principal;
+  credential_jwt: Text;
+  ii_origin: Text;
+};
+
+public type TransferFromError =  {
+    #BadFee : { expected_fee: Nat };
+    #BadBurn : { min_burn_amount: Nat };
+    #InsufficientFunds :  { balance: Nat };
+    #InsufficientAllowance : { allowance: Nat };
+    #TooOld;
+    #CreatedInFuture :{ ledger_time: Nat64 };
+    #Duplicate :{ duplicate_of: Nat };
+    #TemporarilyUnavailable;
+    #GenericError:  { error_code: Nat; message: Text };
+};
+
+type GateCheckFailedReason = {
+    #NotDiamondMember;
+    #NoSnsNeuronsFound;
+    #NoSnsNeuronsWithRequiredStakeFound;
+    #NoSnsNeuronsWithRequiredDissolveDelayFound;
+    #PaymentFailed: TransferFromError;
+    #InsufficientBalance : Nat;
+    #FailedVerifiedCredentialCheck : Text;
+};
+
+ public type JoinCommunityArgs = {
+    community_id : CommunityId;
+    user_id: UserId;
+    principal: Principal;
+    invite_code: ?Nat64;
+    is_platform_moderator: Bool;
+    is_bot: Bool;
+    diamond_membership_expires_at: ?Int;
+    verified_credential_args:?VerifiedCredentialGateArgs;
+  };
+
+   public type JoinChannelArgs = {
+    community_id : CommunityId;
+    channel_id : ChannelId;
+    user_id: UserId;
+    principal: Principal;
+    invite_code: ?Nat64;
+    is_platform_moderator: Bool;
+    is_bot: Bool;
+    diamond_membership_expires_at: ?Int;
+    verified_credential_args:?VerifiedCredentialGateArgs;
+  };
+
+
+ public type JoinCommunityResponse = {
+    #Success : CommunityCanisterCommunitySummary;
+    #AlreadyInCommunity : CommunityCanisterCommunitySummary;
+    #GateCheckFailed : GateCheckFailedReason;
+    #NotInvited;
+    #UserBlocked;
+    #MemberLimitReached : Nat32;
+    #CommunityFrozen;
+    #InternalError : Text;
+};
+
+ public type JoinChannelResponse = {
+    #Success : CommunityCanisterChannelSummary;
+    #SuccessJoinedCommunity : CommunityCanisterCommunitySummary;
+    #AlreadyInChannel : CommunityCanisterCommunitySummary;
+    #GateCheckFailed : GateCheckFailedReason;
+    #UserNotInCommunity;
+    #ChannelNotFound;
+    #NotInvited;
+    #UserSuspended;
+    #UserBlocked;
+    #MemberLimitReached : Nat32;
+    #CommunityFrozen;
+    #InternalError : Text;
+};
+
+public type CommunitySummaryResponse={
+    #Success : CommunityCanisterCommunitySummary;
+    #PrivateCommunity;
+};
+
+public type UserSummaryResponse = {
+  #Success : UserSummary;
+  #UserNotFound;
+};
+
 
   //Actors
 
   public type UserIndexCanister = actor {
     c2c_register_bot : ({username : Text; display_name : ?Text}) -> async InitializeBotResponse;
+    user: query ({user_id : ?UserId; username : ?Text}) -> async UserSummaryResponse;
   };
 
   public type LocalUserIndexCanister = actor {
@@ -1552,6 +1658,13 @@ module {
     messages_by_message_index : query (MessagesByMessageIndexArgs) -> async (MessagesByMessageIndexResponse);
     send_message_v2 : (SendMessageV2Args) -> async (SendMessageResponse);
     edit_message_v2 : (EditMessageV2Args) -> async (EditMessageResponse);
+  };
+
+  public type CommunityIndexCanister = actor {
+    send_message : (SendChannelMessageArgs) -> async (SendMessageResponse);
+    join_community : (JoinCommunityArgs) -> async (JoinCommunityResponse);
+    join_channel : (JoinChannelArgs) -> async (JoinChannelResponse);
+    summary : query ({invite_code: ?Nat64}) -> async (CommunitySummaryResponse);
   };
 
 }
