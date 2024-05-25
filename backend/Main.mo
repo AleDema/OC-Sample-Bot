@@ -69,12 +69,12 @@ shared ({ caller }) actor class OCBot() = Self {
     }
   };
 
-  public func testSendChannelMessage(communityCanisterId : Text, channelId : Nat) : async Result.Result<OCApi.SendMessageResponse, Text>{
+  public func testSendChannelMessage(communityCanisterId : Text, channelId : Nat, text : Text) : async Result.Result<OCApi.SendMessageResponse, Text>{
     let seed : Nat64 = Nat64.fromIntWrap(Time.now());
     let rng = Prng.Seiran128();
     rng.init(seed);
     let id = Nat64.toNat(rng.next());
-    await* ocService.sendChannelMessage(communityCanisterId, channelId, "test_bot", null, #Text({text = "Test"}), id,  null)
+    await* ocService.sendChannelMessage(communityCanisterId, channelId, "test_bot", null, #Text({text = text}), id,  null)
   };
 
   public func testUserSummary(userId : ?Principal, username : ?Text) : async Result.Result<OCApi.UserSummaryResponse, Text>{
@@ -94,8 +94,6 @@ shared ({ caller }) actor class OCBot() = Self {
       invite_code= null;
     });
   };
-
-
 
   public func testListProposals(start : Nat) : async Result.Result<Nat, Text>{
    let res = await* proposalService.listProposalsAfterd("rrkah-fqaaa-aaaaa-aaaaq-cai", ?start, {PS.ListProposalArgsDefault() with omitLargeFields = ?true});
