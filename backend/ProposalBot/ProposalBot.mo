@@ -21,7 +21,9 @@ import GU "../Governance/GovernanceUtils";
 import GT "../Governance/GovernanceTypes";
 module{
 
-    public type ProposalsLookup = Map.Map<Nat, {proposalData : TT.ProposalAPI; messageIndex : ?Nat32; attempts : Nat}>;
+    public type Proposal = {proposalData : TT.ProposalAPI; messageIndex : ?Nat32; attempts : Nat};
+
+    public type ProposalsLookup = Map.Map<Nat, Proposal>;
 
     public type Subscriber = {
         #Group : {topics : [Int32]; groupCanister : Text;};
@@ -32,7 +34,6 @@ module{
     public type ProposalBotModel = {
         var lastProposalId : ?Nat;
         var timerId :?Nat;
-        //var pendingSCMList : List.List<TT.ProposalAPI>;
         var latestNNSMessageIndex : ?Nat32;
         proposalsLookup : ProposalsLookup;
         var numberOfTicksSinceUpdate : Nat;
@@ -48,7 +49,6 @@ module{
         {
             var lastProposalId = null;
             var timerId = null;
-           // var pendingSCMList = List.nil<TT.ProposalAPI>();
             var latestNNSMessageIndex = null;
             proposalsLookup : ProposalsLookup = Map.new();
             var numberOfTicksSinceUpdate = 0;
@@ -64,6 +64,7 @@ module{
     let NNS_PROPOSAL_GROUP_ID = "labxu-baaaa-aaaaf-anb4q-cai";
     let TEST_GROUP_ID = "evg6t-laaaa-aaaar-a4j5q-cai";
     let GOVERNANCE_ID = "rrkah-fqaaa-aaaaa-aaaaq-cai";
+    let VOTING_GROUP_ID = "6q22t-qaaaq-aaaaf-aaamq-cai";
     
     public class ProposalBot(model : ProposalBotModel, botService : BT.BotService, proposalService : PS.ProposalService, logService : LT.LogService) = {
         var updateState : UpdateState = #Stopped;
@@ -127,18 +128,18 @@ module{
             };
         };
 
-        func getUpdateBatch() : (List.List<TT.ProposalAPI>, List.List<TT.ProposalAPI>, Map.Map<Text, List.List<List.List<TT.ProposalAPI>>>) {
-            var rvmList = List.nil<TT.ProposalAPI>();
-            var scmList = List.nil<TT.ProposalAPI>();
-            var scmBatchMap : Map.Map<Text, List.List<List.List<TT.ProposalAPI>>> = Map.new();
-            var tmpMap : Map.Map<Text, List.List<TT.ProposalAPI>> = Map.new();
+        func getUpdateBatch() : (List.List<Proposal>, List.List<Proposal>, Map.Map<Text, List.List<List.List<Proposal>>>) {
+            var rvmList = List.nil<Proposal>();
+            var scmList = List.nil<Proposal>();
+            var scmBatchMap : Map.Map<Text, List.List<List.List<Proposal>>> = Map.new();
+            var tmpMap : Map.Map<Text, List.List<Proposal>> = Map.new();
 
             for(proposal in Map.vals(model.proposalsLookup)){
 
                 switch(T.topicIdToVariant(proposal.proposalData.topicId)){
                     case(#RVM){
                         if(Option.isSome(proposal.messageIndex) or proposal.attempts > 3){
-                            rvmList := List.push(proposal.proposalData, rvmList);
+                            rvmList := List.push(proposal, rvmList);
                             Map.delete(model.proposalsLookup, nhash, proposal.proposalData.id);
                         }
                     };
@@ -146,13 +147,13 @@ module{
                         let proposalHash = TU.extractGitHash(proposal.proposalData.title, proposal.proposalData.description);
                         if(TU.isSeparateBuildProcess(proposal.proposalData.title) or Option.isNull(proposalHash)){
                             if(Option.isSome(proposal.messageIndex) or proposal.attempts > 3){
-                                scmList := List.push(proposal.proposalData, scmList);
+                                scmList := List.push(proposal, scmList);
                                 Map.delete(model.proposalsLookup, nhash, proposal.proposalData.id);
                             };
                         } else if(not TU.isSeparateBuildProcess(proposal.proposalData.title) and Option.isSome(proposalHash)){
                             let key = Option.get(proposalHash, "");
-                            let newList = Option.get(Map.get(tmpMap, thash, key), List.nil<TT.ProposalAPI>());
-                            Map.set(tmpMap, thash, key, List.push(proposal.proposalData, newList));
+                            let newList = Option.get(Map.get(tmpMap, thash, key), List.nil<Proposal>());
+                            Map.set(tmpMap, thash, key, List.push(proposal, newList));
                         };
 
 
@@ -164,20 +165,20 @@ module{
             for((key, pList) in Map.entries(tmpMap)){
                 if(List.size(pList) > 0 and List.size(pList) < PENDING_SCM_LIMIT and model.numberOfTicksSinceUpdate > MAX_TICKS_WITHOUT_UPDATE){
                     logService.addLog(#Info, "Sending pending list cause wait for quiet expired", null);
-                    var list : List.List<List.List<TT.ProposalAPI>> = List.nil();
+                    var list : List.List<List.List<Proposal>> = List.nil();
                     list := List.push(pList, list);
                     Map.set(scmBatchMap, thash, key, list);
-                    for (proposal in List.toIter(pList)){
-                        Map.delete(model.proposalsLookup, nhash, proposal.id);
+                    for (p in List.toIter(pList)){
+                        Map.delete(model.proposalsLookup, nhash, p.proposalData.id);
                     };
 
                 } else if (List.size(pList) > PENDING_SCM_LIMIT){
                     logService.addLog(#Info, "Sending pending list cause too may entries", null);
                     let chunks = List.chunks(PENDING_SCM_LIMIT, pList);
-                    let filteredChunks = List.filter(chunks, func(chunk : List.List<TT.ProposalAPI>) : Bool{
+                    let filteredChunks = List.filter(chunks, func(chunk : List.List<Proposal>) : Bool{
                         if(List.size(chunk) == PENDING_SCM_LIMIT){
                             for (p in List.toIter(chunk) ){
-                                Map.delete(model.proposalsLookup, nhash, p.id);
+                                Map.delete(model.proposalsLookup, nhash, p.proposalData.id);
                             };
                             return true;
                         };
@@ -191,15 +192,35 @@ module{
 
         };
 
-        func sendMessages(rvmList : List.List<TT.ProposalAPI>, scmList : List.List<TT.ProposalAPI>, batchMap : Map.Map<Text, List.List<List.List<TT.ProposalAPI>>>) : async* (){
+        func sendMessages(rvmList : List.List<Proposal>, scmList : List.List<Proposal>, batchMap : Map.Map<Text, List.List<List.List<Proposal>>>) : async* (){
             for(sub in Map.vals(model.subscribers)){
                 switch(sub){
                     case(#Group(group)){
-                        
+                        for(tid in group.topics.vals()){
+                            switch(T.topicIdToVariant(tid)){
+                                case(#RVM){
+                                    createProposalChannelThread(sub.groupCanister, )
+                                };
+                              case(#SCM){
+
+                                };
+                              case(_){};
+                            }
+                        };
 
                     };
                     case(#Channel(channel)){
+                        for(tid in channel.topics.vals()){
+                            switch(T.topicIdToVariant(tid)){
+                                case(#RVM){
 
+                              };
+                              case(#SCM){
+
+                              };
+                              case(_){};
+                            }
+                        };
                     };
                 }
             };
@@ -373,7 +394,8 @@ module{
             });
         };
 
-        func createProposalThread(targetGroupId : Text, votingGroupId : Text, proposal : TT.ProposalAPI, messageIndex : ?Nat32) : async* (){
+
+        func createProposalGroupThread(targetGroupId : Text, proposal : TT.ProposalAPI, messageIndex : ?Nat32) : async* (){
             //logService.addLog(#Info, "[createProposalThread] Creating proposal thread: " # Nat.toText(proposal.id) # " messageIndex: " # Nat32.toText(Option.get(messageIndex, Nat32.fromNat(0))));
             let text = TU.formatProposal(proposal);
             let res = await* botService.sendTextGroupMessage(targetGroupId, text, null);
@@ -382,7 +404,7 @@ module{
                 case(#ok(data)){
                     switch(data){
                         case(#Success(d)){
-                            let text2 = TU.formatProposalThreadMsg(votingGroupId, proposal.id, messageIndex);
+                            let text2 = TU.formatProposalThreadMsg(VOTING_GROUP_ID, proposal.id, messageIndex);
                             let res = await* botService.sendTextGroupMessage(targetGroupId, text2, ?d.message_index);
                         };
                         case(_){};
@@ -394,7 +416,7 @@ module{
             };
         };
 
-        func createBatchThread(targetGroupId : Text, votingGroupId : Text, proposalList : [TT.ProposalAPI], proposalsLookup : ProposalsLookup) : async* (){
+        func createBatchGroupThread(targetGroupId : Text, proposalList : [Proposal]) : async* (){
             let text = TU.formatProposals(proposalList);
             let #ok(res) = await* botService.sendTextGroupMessage(targetGroupId, text, null)
             else {
@@ -403,8 +425,46 @@ module{
             };
             switch(res){
                 case(#Success(d)){
-                    let text2 = TU.formatBatchProposalThreadMsg(votingGroupId, proposalList, proposalsLookup);
+                    let text2 = TU.formatBatchProposalThreadMsg(VOTING_GROUP_ID, proposalList);
                     let res = await* botService.sendTextGroupMessage(targetGroupId, text2, ?d.message_index);
+                };
+                case(_){};
+            }
+        };
+
+
+        func createProposalChannelThread(communityId : Text, channelId : Nat, proposal : Proposal, messageIndex : ?Nat32) : async* (){
+            //logService.addLog(#Info, "[createProposalThread] Creating proposal thread: " # Nat.toText(proposal.id) # " messageIndex: " # Nat32.toText(Option.get(messageIndex, Nat32.fromNat(0))));
+            let text = TU.formatProposal(proposal.proposalData);
+            let res = await* botService.sendChannelMessage(communityId, channelId, #Text({text = text}), null);
+
+            switch(res){
+                case(#ok(data)){
+                    switch(data){
+                        case(#Success(d)){
+                            let text2 = TU.formatProposalThreadMsg(VOTING_GROUP_ID, proposal.proposalData.id, messageIndex);
+                            let res = await* botService.sendChannelMessage(communityId, channelId, #Text({text = text2}), ?d.message_index);
+                        };
+                        case(_){};
+                    };
+                };
+                case(#err(e)){
+                    logService.addLog(#Error, "Error sending message: " # e, ?"[createProposalThread]");
+                }
+            };
+        };
+
+        func createBatchChannelThread(communityId : Text, channelId : Nat, proposalList : [Proposal]) : async* (){
+            let text = TU.formatProposals(proposalList);
+            let #ok(res) = await* botService.sendChannelMessage(communityId, channelId, #Text({text = text}), null)
+            else {
+                logService.addLog(#Error, "Error sending message", ?"createBatchThread");
+                return;
+            };
+            switch(res){
+                case(#Success(d)){
+                    let text2 = TU.formatBatchProposalThreadMsg(VOTING_GROUP_ID, proposalList);
+                   let res = await* botService.sendChannelMessage(communityId, channelId, #Text({text = text2}), ?d.message_index);
                 };
                 case(_){};
             }

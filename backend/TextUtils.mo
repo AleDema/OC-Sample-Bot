@@ -15,6 +15,8 @@ import Utils "Utils";
 
 module {
   let { nhash; n64hash; n32hash } = Map;
+  type Proposal = {proposalData : TT.ProposalAPI; messageIndex : ?Nat32; attempts : Nat};
+
 
   public func formatProposal(proposal : TT.ProposalAPI) : Text {
     var text = "Proposal " # Nat.toText(proposal.id) # "\n";
@@ -28,10 +30,10 @@ module {
     text
   };
 
-  public func formatProposals(proposals : [TT.ProposalAPI]) : Text {
+  public func formatProposals(proposals : [Proposal]) : Text {
     var text = "";
     for (proposal in Array.vals(proposals)) {
-      text := text # formatProposal(proposal) # "\n\n";
+      text := text # formatProposal(proposal.proposalData) # "\n\n";
     };
     text
   };
@@ -45,12 +47,11 @@ module {
     text
   };
 
-  public func formatBatchProposalThreadMsg(ocGroupId : Text, proposals : [TT.ProposalAPI], proposalsLookup : T.ProposalsLookup) : Text {
+  public func formatBatchProposalThreadMsg(ocGroupId : Text, proposals : [Proposal]) : Text {
     var text = "";
     for (proposal in Array.vals(proposals)) {
       let _ = do ?{
-        let tmp = Map.get(proposalsLookup, nhash, proposal.id);
-        text := text # formatProposalThreadMsg(ocGroupId, proposal.id, tmp!.messageIndex) # "\n\n";
+        text := text # formatProposalThreadMsg(ocGroupId, proposal.proposalData.id, proposal.messageIndex) # "\n\n";
       };
     };
     text
