@@ -8,8 +8,10 @@ import Nat64 "mo:base/Nat64";
 import Text "mo:base/Text";
 import Nat32 "mo:base/Nat32";
 import Int64 "mo:base/Int64";
+import Iter "mo:base/Iter";
 import Map "mo:map/Map";
 import DateTime "mo:datetime/DateTime";
+import Utils "Utils";
 
 module {
   let { nhash; n64hash; n32hash } = Map;
@@ -60,6 +62,28 @@ module {
     };
     return false
   };
+
+
+  public func extractGitHash(title : Text, description : ?Text) : ?Text {
+    let #ok(descr) = Utils.optToRes(description)
+    else{
+      return null;
+    };
+
+   if(Text.contains(title, #text "with hash")) {
+      let lines = Iter.toArray(Text.split(descr, #char '\n'));
+
+      for (line in Array.vals(lines)) {
+          if (Text.startsWith(line, #text "Git Hash: ")) {
+              var hash = Text.trimStart(line, #text "Git Hash: ");
+              return ?Text.trim(hash, #char ' ');
+          };
+      };
+   };
+    return null;
+
+  };
+
 
   func proposalTopicToText(topic : {#SCM; #RVM; #OTHER}) : Text {
     switch(topic){
