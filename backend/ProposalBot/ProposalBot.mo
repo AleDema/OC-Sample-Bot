@@ -18,29 +18,42 @@ import T "../Types";
 import PS "../Proposal/ProposalService";
 import PM "../Proposal/ProposalMappings";
 import GU "../Governance/GovernanceUtils";
-
+import GT "../Governance/GovernanceTypes";
 module{
 
     public type ProposalsLookup = Map.Map<Nat, {proposalData : TT.ProposalAPI; messageIndex : ?Nat32; attempts : Nat}>;
+
+    public type Subscriber = {
+        #Group : {topics : [Int32]; groupCanister : Text;};
+        #Channel : {topics : [Int32]; communityCanister : Text; channelId : Nat;};
+    };
 
 
     public type ProposalBotModel = {
         var lastProposalId : ?Nat;
         var timerId :?Nat;
-        var pendingSCMList : List.List<TT.ProposalAPI>;
+        //var pendingSCMList : List.List<TT.ProposalAPI>;
         var latestNNSMessageIndex : ?Nat32;
         proposalsLookup : ProposalsLookup;
         var numberOfTicksSinceUpdate : Nat;
+        subscribers : Map.Map<Text, Subscriber>;
+    };
+
+    public type UpdateState = {
+        #Running;
+        #Stopped;
     };
 
     public func initModel() : ProposalBotModel{
         {
             var lastProposalId = null;
             var timerId = null;
-            var pendingSCMList = List.nil<TT.ProposalAPI>();
+           // var pendingSCMList = List.nil<TT.ProposalAPI>();
             var latestNNSMessageIndex = null;
             proposalsLookup : ProposalsLookup = Map.new();
             var numberOfTicksSinceUpdate = 0;
+            subscribers : Map.Map<Text, Subscriber> = Map.new();
+
         }
     };
 
@@ -53,6 +66,7 @@ module{
     let GOVERNANCE_ID = "rrkah-fqaaa-aaaaa-aaaaq-cai";
     
     public class ProposalBot(model : ProposalBotModel, botService : BT.BotService, proposalService : PS.ProposalService, logService : LT.LogService) = {
+        var updateState : UpdateState = #Stopped;
         public func initTimer<system>(_tickrateInSeconds : ?Nat) : async Result.Result<(), Text> {
                     
             let tickrate : Nat = Option.get(_tickrateInSeconds, 5* 60); // 5 minutes
@@ -62,7 +76,7 @@ module{
             };
 
             model.timerId := ?Timer.recurringTimer<system>(#seconds(tickrate), func() : async () {
-            await update(model.lastProposalId);
+                await update(model.lastProposalId);
             });
 
             return #ok()
@@ -81,94 +95,141 @@ module{
             }
         };
 
-        public func update(after : ?Nat) : async () {
-            model.numberOfTicksSinceUpdate := model.numberOfTicksSinceUpdate + 1;
-            logService.addLog(#Info, "[Running update] Number of ticks since last update: " # Nat.toText(model.numberOfTicksSinceUpdate), null);
+        func updateInternalState(arg : Result.Result<GT.ListProposalInfoResponse, Text>) : () {
             
-            let topics = PS.processIncludeTopics(GU.NNSFunctions,[8,13]);
-            //logService.logInfo("topics size: " # Nat.toText(Array.size(topics)), null);
-            let res = await* proposalService.listProposalsAfterd(GOVERNANCE_ID, after, {PS.ListProposalArgsDefault()
-                with excludeTopic = topics;
-            });
-
-            switch(res){
+            switch(arg){
                 case(#ok(proposals)){
-                    logService.logInfo("Array size: " # Nat.toText(Array.size(proposals.proposal_info)), null);
+                   // logService.logInfo("Array size: " # Nat.toText(Array.size(proposals.proposal_info)), null);
                     let mappedProps = PM.mapGetProposals(proposals.proposal_info);
-                    logService.logInfo("mappedProps size: " # Nat.toText(Array.size(mappedProps)), null);
+                    //logService.logInfo("mappedProps size: " # Nat.toText(Array.size(mappedProps)), null);
                     for(proposal in Array.vals(mappedProps)){
                         //logService.logInfo("[Adding to map", null);
                         Map.set(model.proposalsLookup, nhash, proposal.id, { proposalData = PM.proposalToAPI(proposal); messageIndex = null; attempts = 0});
+
+                        if(T.topicIdToVariant(proposal.topicId) == #SCM and (not TU.isSeparateBuildProcess(proposal.title) or Option.isNull(TU.extractGitHash(proposal.title, proposal.description)))){
+                            if(Map.has(model.proposalsLookup, nhash, proposal.id)){
+                               // model.pendingSCMList := List.push<TT.ProposalAPI>(PM.proposalToAPI(proposal), model.pendingSCMList);
+                                model.numberOfTicksSinceUpdate := 0;
+                                logService.addLog(#Info, "Pushing to list: " # Nat.toText(proposal.id), null);
+                            } else {
+                                logService.addLog(#Info, "Already in list" # Nat.toText(proposal.id), null);
+                            };
+                        };
+
+                        if(proposal.id > Option.get(model.lastProposalId, 0) or Option.isNull(model.lastProposalId)){
+                            model.lastProposalId := ?(proposal.id);
+                        };
                     };
                 };
                 case(#err(e)){
                     logService.logError("listProposalsAfterd return err: " # e, null);
                 };
             };
+        };
 
-            ignore await* matchProposalsWithMessages(NNS_PROPOSAL_GROUP_ID, model.proposalsLookup);
+        func getUpdateBatch() : (List.List<TT.ProposalAPI>, List.List<TT.ProposalAPI>, Map.Map<Text, List.List<List.List<TT.ProposalAPI>>>) {
+            var rvmList = List.nil<TT.ProposalAPI>();
+            var scmList = List.nil<TT.ProposalAPI>();
+            var scmBatchMap : Map.Map<Text, List.List<List.List<TT.ProposalAPI>>> = Map.new();
+            var tmpMap : Map.Map<Text, List.List<TT.ProposalAPI>> = Map.new();
 
             for(proposal in Map.vals(model.proposalsLookup)){
 
                 switch(T.topicIdToVariant(proposal.proposalData.topicId)){
                     case(#RVM){
-                    if(Option.isSome(proposal.messageIndex) or proposal.attempts > 3){
-                        await* createProposalThread(TEST_GROUP_ID, NNS_PROPOSAL_GROUP_ID, proposal.proposalData, proposal.messageIndex);
-                        Map.delete(model.proposalsLookup, nhash, proposal.proposalData.id);
-                    }
+                        if(Option.isSome(proposal.messageIndex) or proposal.attempts > 3){
+                            rvmList := List.push(proposal.proposalData, rvmList);
+                            Map.delete(model.proposalsLookup, nhash, proposal.proposalData.id);
+                        }
                     };
                     case(#SCM){
-                    if(TU.isSeparateBuildProcess(proposal.proposalData.title)){
-                        if(Option.isSome(proposal.messageIndex) or proposal.attempts > 3){
-                            await* createProposalThread(TEST_GROUP_ID, NNS_PROPOSAL_GROUP_ID, proposal.proposalData, proposal.messageIndex);
-                            Map.delete(model.proposalsLookup, nhash, proposal.proposalData.id);
+                        let proposalHash = TU.extractGitHash(proposal.proposalData.title, proposal.proposalData.description);
+                        if(TU.isSeparateBuildProcess(proposal.proposalData.title) or Option.isNull(proposalHash)){
+                            if(Option.isSome(proposal.messageIndex) or proposal.attempts > 3){
+                                scmList := List.push(proposal.proposalData, scmList);
+                                Map.delete(model.proposalsLookup, nhash, proposal.proposalData.id);
+                            };
+                        } else if(not TU.isSeparateBuildProcess(proposal.proposalData.title) and Option.isSome(proposalHash)){
+                            let key = Option.get(proposalHash, "");
+                            let newList = Option.get(Map.get(tmpMap, thash, key), List.nil<TT.ProposalAPI>());
+                            Map.set(tmpMap, thash, key, List.push(proposal.proposalData, newList));
                         };
-                    } else {
-                        if(not List.some(model.pendingSCMList, func(p : TT.ProposalAPI) : Bool { return p.id == proposal.proposalData.id})){
-                            model.pendingSCMList := List.push(proposal.proposalData, model.pendingSCMList);
-                            model.numberOfTicksSinceUpdate := 0;
-                            logService.addLog(#Info, "Pushing to list: " # Nat.toText(proposal.proposalData.id), null);
-                        } else {
-                            logService.addLog(#Info, "Already in list" # Nat.toText(proposal.proposalData.id), null);
-                        };
-                    };
+
 
                     };
                     case(_){};
-            };
-
-                if(proposal.proposalData.id > Option.get(model.lastProposalId, 0) or Option.isNull(model.lastProposalId)){
-                    model.lastProposalId := ?(proposal.proposalData.id);
                 };
             };
 
-            if((List.size(model.pendingSCMList) > 0 and List.size(model.pendingSCMList) < PENDING_SCM_LIMIT and model.numberOfTicksSinceUpdate > MAX_TICKS_WITHOUT_UPDATE)){
-                logService.addLog(#Info, "Sending pending list cause wait for quiet expired", null);
-                let arr = List.toArray(List.reverse(model.pendingSCMList));
-                await* createBatchThread(TEST_GROUP_ID, NNS_PROPOSAL_GROUP_ID, arr, model.proposalsLookup);
-                for (p in Array.vals(arr) ){
-                    Map.delete(model.proposalsLookup, nhash, p.id);
+            for((key, pList) in Map.entries(tmpMap)){
+                if(List.size(pList) > 0 and List.size(pList) < PENDING_SCM_LIMIT and model.numberOfTicksSinceUpdate > MAX_TICKS_WITHOUT_UPDATE){
+                    logService.addLog(#Info, "Sending pending list cause wait for quiet expired", null);
+                    var list : List.List<List.List<TT.ProposalAPI>> = List.nil();
+                    list := List.push(pList, list);
+                    Map.set(scmBatchMap, thash, key, list);
+                    for (proposal in List.toIter(pList)){
+                        Map.delete(model.proposalsLookup, nhash, proposal.id);
+                    };
+
+                } else if (List.size(pList) > PENDING_SCM_LIMIT){
+                    logService.addLog(#Info, "Sending pending list cause too may entries", null);
+                    let chunks = List.chunks(PENDING_SCM_LIMIT, pList);
+                    let filteredChunks = List.filter(chunks, func(chunk : List.List<TT.ProposalAPI>) : Bool{
+                        if(List.size(chunk) == PENDING_SCM_LIMIT){
+                            for (p in List.toIter(chunk) ){
+                                Map.delete(model.proposalsLookup, nhash, p.id);
+                            };
+                            return true;
+                        };
+                        return false;
+                    });
+                    Map.set(scmBatchMap, thash, key, filteredChunks);
                 };
-                model.pendingSCMList := List.nil<TT.ProposalAPI>();
-            } else if (List.size(model.pendingSCMList) > PENDING_SCM_LIMIT){
-                logService.addLog(#Info, "Sending pending list cause too may entries", null);
-                //reverses the list to print in ascending order
-                model.pendingSCMList := List.reverse(model.pendingSCMList);
-                let chunks = List.chunks(PENDING_SCM_LIMIT, model.pendingSCMList);
-                for(chunk in List.toIter(chunks)){
-                if (List.size(chunk) < PENDING_SCM_LIMIT){
-                    model.pendingSCMList := chunk;
-                    return;
-                } else {
-                    await* createBatchThread(TEST_GROUP_ID, NNS_PROPOSAL_GROUP_ID, List.toArray(chunk), model.proposalsLookup);
-                    for ( p in List.toIter(chunk) ){
-                        Map.delete(model.proposalsLookup, nhash, p.id);
+            };
+
+            return (rvmList, scmList, scmBatchMap);
+
+        };
+
+        func sendMessages(rvmList : List.List<TT.ProposalAPI>, scmList : List.List<TT.ProposalAPI>, batchMap : Map.Map<Text, List.List<List.List<TT.ProposalAPI>>>) : async* (){
+            for(sub in Map.vals(model.subscribers)){
+                switch(sub){
+                    case(#Group(group)){
+                        
+
+                    };
+                    case(#Channel(channel)){
+
                     };
                 }
-                };
-                model.pendingSCMList := List.nil<TT.ProposalAPI>();
+            };
+        };
+
+        public func update(after : ?Nat) : async () {
+            if(updateState == #Running){
+                logService.logWarn("Update already running", ?"[update]");
+                return;
             };
 
+            updateState:= #Running;
+            model.numberOfTicksSinceUpdate := model.numberOfTicksSinceUpdate + 1;
+            logService.addLog(#Info, "[Running update] Number of ticks since last update: " # Nat.toText(model.numberOfTicksSinceUpdate), null);
+            
+            let topics = PS.processIncludeTopics(GU.NNSFunctions,[8,13]);
+
+            let res = await* proposalService.listProposalsAfterd(GOVERNANCE_ID, after, {PS.ListProposalArgsDefault()
+                with excludeTopic = topics;
+            });
+
+            updateInternalState(res);
+
+            ignore await* matchProposalsWithMessages(NNS_PROPOSAL_GROUP_ID, model.proposalsLookup);
+
+            let (rvmList, scmList, batchMap) = getUpdateBatch();
+
+            await* sendMessages(rvmList, scmList, batchMap);
+            
+            updateState:= #Stopped;
             logService.addLog(#Info, "Finished update", null);
         };
 
@@ -260,6 +321,56 @@ module{
 
             model.latestNNSMessageIndex := ?index;
             #ok();
+        };
+
+        public func addSubscriber(subscriber : Subscriber, inviteCode : ?Nat64) : async* Result.Result<(), Text>{
+
+            switch(subscriber){
+                case(#Group(data)){
+                    if(Map.has(model.subscribers, thash, data.groupCanister)){
+                        return #err("Subscriber already exists");
+                    };
+                    let res = await* botService.joinGroup(data.groupCanister, inviteCode);
+                    switch(res){
+                        case(#ok(_)){
+                            Map.set(model.subscribers, thash, data.groupCanister, subscriber);
+                        };
+                        case(#err(err)){
+                            return #err(err);
+                        }
+                    }
+                };
+                case(#Channel(data)){
+                    if(Map.has(model.subscribers, thash, Nat.toText(data.channelId))){
+                        return #err("Subscriber already exists");
+                    };
+                    let res = await* botService.joinCommunity(data.communityCanister, inviteCode : ?Nat64);
+                    switch(res){
+                        case(#ok(_)){
+                            let res2 = await* botService.joinChannel(data.communityCanister, data.channelId, inviteCode);
+                             switch(res2){
+                                case(#ok(_)){
+                                    Map.set(model.subscribers, thash, Nat.toText(data.channelId), subscriber);
+                                };
+                                case(#err(err)){
+                                    return #err(err);
+                                }
+                             };
+                        };
+                        case(#err(err)){
+                            return #err(err);
+                        }
+                    }
+                };
+            };
+
+            #ok();
+        };
+
+        public func getSubscribers() : [Subscriber]{
+            return Map.toArrayMap<Text, Subscriber, Subscriber>(model.subscribers, func (k : Text, v : Subscriber) : ?Subscriber {
+                return ?v;
+            });
         };
 
         func createProposalThread(targetGroupId : Text, votingGroupId : Text, proposal : TT.ProposalAPI, messageIndex : ?Nat32) : async* (){

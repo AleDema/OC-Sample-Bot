@@ -95,6 +95,18 @@ shared ({ caller }) actor class OCBot() = Self {
     });
   };
 
+  public func testAddSubscriber(sub : PB.Subscriber, inviteCode : ?Nat64) : async Result.Result<(), Text>{
+   await* proposalBot.addSubscriber(sub, inviteCode);
+  };
+
+  public func testgetSubscribers() : async [PB.Subscriber] {
+    proposalBot.getSubscribers();
+  };
+
+  // public query func testGetHash() : async ?Text{
+  //  TU.extractGitHash();
+  // };
+
   public func testListProposals(start : Nat) : async Result.Result<Nat, Text>{
    let res = await* proposalService.listProposalsAfterd("rrkah-fqaaa-aaaaa-aaaaq-cai", ?start, {PS.ListProposalArgsDefault() with omitLargeFields = ?true});
 
