@@ -32,7 +32,10 @@ module {
         editTextGroupMessage : (groupCanisterId : Text, messageId : OCApi.MessageId, newContent : Text) -> async* Result.Result<OCApi.EditMessageResponse, Text>;
         getGroupMessagesByIndex : (groupCanisterId : Text, indexes : [Nat32] ,latest_known_update : ?Nat64) -> async* Result.Result<OCApi.MessagesResponse, Text>;
         getNNSProposalMessageData : (message : OCApi.MessageEventWrapper) -> Result.Result<{proposalId : OCApi.ProposalId; messageIndex : OCApi.MessageIndex}, Text>;
-        getLatestGroupMessageIndex : (groupCanisterId : Text) -> async* ?OCApi.MessageIndex
+        getLatestGroupMessageIndex : (groupCanisterId : Text) -> async* ?OCApi.MessageIndex;
+
+        joinCommunity : (communityCanisterId : Text, inviteCode : ?Nat64) -> async* Result.Result<Text, Text>;
+        joinChannel : (communityCanisterId : Text, channelId: Nat, inviteCode : ?Nat64) -> async* Result.Result<Text, Text>;
     }
 
 
