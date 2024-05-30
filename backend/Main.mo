@@ -99,7 +99,7 @@ shared ({ caller }) actor class OCBot() = Self {
    await* proposalBot.addSubscriber(sub, inviteCode);
   };
 
-  public func testgetSubscribers() : async [PB.Subscriber] {
+  public func testGetSubscribers() : async [PB.Subscriber] {
     proposalBot.getSubscribers();
   };
 
@@ -156,13 +156,13 @@ shared ({ caller }) actor class OCBot() = Self {
     proposalBotData.lastProposalId
   };
 
-  public func testGetPendingList() : async ([TT.ProposalAPI], Nat, Nat){
-    (List.toArray(proposalBotData.pendingSCMList), proposalBotData.numberOfTicksSinceUpdate, List.size(proposalBotData.pendingSCMList))
-  };
+  // public func testGetPendingList() : async ([TT.ProposalAPI], Nat, Nat){
+  //   (List.toArray(proposalBotData.pendingSCMList), proposalBotData.numberOfTicksSinceUpdate, List.size(proposalBotData.pendingSCMList))
+  // };
 
-  public func testClearPendingList() : async (){
-    proposalBotData.pendingSCMList := List.nil<TT.ProposalAPI>();
-  };
+  // public func testClearPendingList() : async (){
+  //   proposalBotData.pendingSCMList := List.nil<TT.ProposalAPI>();
+  // };
 
   public func testGetProposalsLookup() : async [(Nat, {proposalData : TT.ProposalAPI; messageIndex : ?Nat32; attempts : Nat})] {
     Map.toArray(proposalBotData.proposalsLookup);
@@ -181,7 +181,6 @@ shared ({ caller }) actor class OCBot() = Self {
   };
 
   public func testResetState() : async (){
-    proposalBotData.pendingSCMList := List.nil<TT.ProposalAPI>();
     Map.clear(proposalBotData.proposalsLookup);
     proposalBotData.latestNNSMessageIndex := null;
   };

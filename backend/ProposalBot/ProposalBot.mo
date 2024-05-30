@@ -97,7 +97,6 @@ module{
         };
 
         func updateInternalState(arg : Result.Result<GT.ListProposalInfoResponse, Text>) : () {
-            
             switch(arg){
                 case(#ok(proposals)){
                    // logService.logInfo("Array size: " # Nat.toText(Array.size(proposals.proposal_info)), null);
@@ -128,10 +127,10 @@ module{
             };
         };
 
-        func getUpdateBatch() : (List.List<Proposal>, List.List<Proposal>, Map.Map<Text, List.List<List.List<Proposal>>>) {
+        func getUpdateBatch() : ([Proposal], [Proposal], List.List<[Proposal]>) {
             var rvmList = List.nil<Proposal>();
             var scmList = List.nil<Proposal>();
-            var scmBatchMap : Map.Map<Text, List.List<List.List<Proposal>>> = Map.new();
+            var scmBatchList: List.List<[Proposal]> = List.nil();
             var tmpMap : Map.Map<Text, List.List<Proposal>> = Map.new();
 
             for(proposal in Map.vals(model.proposalsLookup)){
@@ -165,9 +164,7 @@ module{
             for((key, pList) in Map.entries(tmpMap)){
                 if(List.size(pList) > 0 and List.size(pList) < PENDING_SCM_LIMIT and model.numberOfTicksSinceUpdate > MAX_TICKS_WITHOUT_UPDATE){
                     logService.addLog(#Info, "Sending pending list cause wait for quiet expired", null);
-                    var list : List.List<List.List<Proposal>> = List.nil();
-                    list := List.push(pList, list);
-                    Map.set(scmBatchMap, thash, key, list);
+                    scmBatchList := List.push(List.toArray(pList), scmBatchList);
                     for (p in List.toIter(pList)){
                         Map.delete(model.proposalsLookup, nhash, p.proposalData.id);
                     };
@@ -175,7 +172,7 @@ module{
                 } else if (List.size(pList) > PENDING_SCM_LIMIT){
                     logService.addLog(#Info, "Sending pending list cause too may entries", null);
                     let chunks = List.chunks(PENDING_SCM_LIMIT, pList);
-                    let filteredChunks = List.filter(chunks, func(chunk : List.List<Proposal>) : Bool{
+                    ignore List.filter(chunks, func(chunk : List.List<Proposal>) : Bool{
                         if(List.size(chunk) == PENDING_SCM_LIMIT){
                             for (p in List.toIter(chunk) ){
                                 Map.delete(model.proposalsLookup, nhash, p.proposalData.id);
@@ -183,25 +180,37 @@ module{
                             return true;
                         };
                         return false;
+                    }) |>
+                    List.map(_, func(chunk : List.List<Proposal>) : [Proposal] {
+                         scmBatchList := List.push(List.toArray(chunk), scmBatchList);
+                         return List.toArray(chunk);
                     });
-                    Map.set(scmBatchMap, thash, key, filteredChunks);
                 };
             };
 
-            return (rvmList, scmList, scmBatchMap);
+            return (List.toArray(rvmList), List.toArray(scmList), scmBatchList);
 
         };
 
-        func sendMessages(rvmList : List.List<Proposal>, scmList : List.List<Proposal>, batchMap : Map.Map<Text, List.List<List.List<Proposal>>>) : async* (){
+        func sendMessages(rvmList : [Proposal], scmList : [Proposal], scmBatchList : List.List<[Proposal]>) : async* (){
             for(sub in Map.vals(model.subscribers)){
                 switch(sub){
                     case(#Group(group)){
                         for(tid in group.topics.vals()){
                             switch(T.topicIdToVariant(tid)){
                                 case(#RVM){
-                                    createProposalChannelThread(sub.groupCanister, )
+                                    for(p in rvmList.vals()){
+                                        await* createProposalGroupThread(group.groupCanister, p.proposalData, p.messageIndex)
+                                    };
                                 };
                               case(#SCM){
+                                    for(p in scmList.vals()){
+                                        await* createProposalGroupThread(group.groupCanister, p.proposalData, p.messageIndex)
+                                    };
+
+                                    for(chunk in List.toIter(scmBatchList)){
+                                        await* createBatchGroupThread(group.groupCanister, chunk)
+                                    };
 
                                 };
                               case(_){};
