@@ -20,7 +20,6 @@ import Map "mo:map/Map";
 import T "./Types";
 import TU "./TextUtils";
 import G "./Guards";
-import OC "./OCTypes";
 import MT "./MetricTypes";
 import F "./Fixtures";
 import TT "./TrackerTypes";
@@ -280,7 +279,7 @@ shared ({ caller }) actor class OCBot() = Self {
   // };
 
   
-  public func testRange(start: Int, end: Nat) : async Result.Result<([OC.MessageEventWrapper], [Nat32]), ()>{
+  public func testRange(start: Int, end: Nat) : async Result.Result<([OCApi.MessageEventWrapper], [Nat32]), ()>{
     let indexVec = Iter.range(end, start) |> 
                       Iter.map(_, func (n : Nat) : Nat32 {Nat32.fromNat(n)}) |> 
                         Iter.toArray(_);

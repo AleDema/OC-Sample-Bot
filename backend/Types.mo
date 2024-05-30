@@ -1,4 +1,4 @@
-import OC "./OCTypes";
+import OC "./OC/OCApi";
 import Principal "mo:base/Principal";
 import Map "mo:map/Map";
 import TT "./TrackerTypes";
