@@ -51,6 +51,13 @@ module{
             case(_){ "" };
         };
 
+        
+        let descr : ?Text = switch(nnsProposal.proposal){
+            case(?p){?p.summary};
+            case(_){ null };
+        };
+
+
         let #ok(status) = mapStatus(nnsProposal.status)
         else {
             return #err("Failed to map proposal status")
@@ -60,7 +67,7 @@ module{
             id = Nat64.toNat(id);
             title = title;
             topicId = nnsProposal.topic;
-            description = null;
+            description = descr;
             proposer = proposer.id;
             timestamp = Int64.toNat64(Int64.fromInt(Time.now()));
             var deadlineTimestampSeconds = nnsProposal.deadline_timestamp_seconds;
