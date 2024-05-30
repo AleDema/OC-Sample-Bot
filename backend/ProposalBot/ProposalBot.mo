@@ -182,13 +182,13 @@ module{
                         return false;
                     }) |>
                     List.map(_, func(chunk : List.List<Proposal>) : [Proposal] {
-                         scmBatchList := List.push(List.toArray(chunk), scmBatchList);
+                         scmBatchList := List.push(List.toArray(List.reverse(chunk)), scmBatchList);
                          return List.toArray(chunk);
                     });
                 };
             };
 
-            return (List.toArray(rvmList), List.toArray(scmList), scmBatchList);
+            return (List.toArray(List.reverse(rvmList)), List.toArray(List.reverse(scmList)), scmBatchList);
 
         };
 
