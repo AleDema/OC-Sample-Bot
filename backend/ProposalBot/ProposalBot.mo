@@ -130,14 +130,14 @@ module{
         func getUpdateBatch() : ([Proposal], [Proposal], List.List<[Proposal]>) {
             var rvmList = List.nil<Proposal>();
             var scmList = List.nil<Proposal>();
-            var scmBatchList: List.List<[Proposal]> = List.nil();
+            var scmBatchList = List.nil<[Proposal]>();
             var tmpMap : Map.Map<Text, List.List<Proposal>> = Map.new();
 
             for(proposal in Map.vals(model.proposalsLookup)){
 
                 switch(T.topicIdToVariant(proposal.proposalData.topicId)){
                     case(#RVM){
-                        if(Option.isSome(proposal.messageIndex) or proposal.attempts > 3){
+                        if(Option.isSome(proposal.messageIndex) or proposal.attempts >= MAX_TICKS_WITHOUT_UPDATE){
                             rvmList := List.push(proposal, rvmList);
                             Map.delete(model.proposalsLookup, nhash, proposal.proposalData.id);
                         }
@@ -146,7 +146,7 @@ module{
                         let proposalHash = TU.extractGitHash(proposal.proposalData.title, proposal.proposalData.description);
                         //logService.logInfo("Proposal ID: " # Nat.toText(proposal.proposalData.id) #  " has git hash: " # Option.get(proposalHash, "Null") # " Description: " # Option.get(proposal.proposalData.description, "null"), ?"[getUpdateBatch]");
                         if(TU.isSeparateBuildProcess(proposal.proposalData.title) or Option.isNull(proposalHash)){
-                            if(Option.isSome(proposal.messageIndex) or proposal.attempts > 3){
+                            if(Option.isSome(proposal.messageIndex) or proposal.attempts >= MAX_TICKS_WITHOUT_UPDATE){
                                 scmList := List.push(proposal, scmList);
                                 Map.delete(model.proposalsLookup, nhash, proposal.proposalData.id);
                             };
@@ -163,9 +163,9 @@ module{
             };
 
             for((key, pList) in Map.entries(tmpMap)){
-                if(List.size(pList) > 0 and List.size(pList) < PENDING_SCM_LIMIT and model.numberOfTicksSinceUpdate > MAX_TICKS_WITHOUT_UPDATE){
+                if(List.size(pList) > 0 and List.size(pList) < PENDING_SCM_LIMIT and model.numberOfTicksSinceUpdate >= MAX_TICKS_WITHOUT_UPDATE){
                     logService.addLog(#Info, "Sending pending list cause wait for quiet expired", null);
-                    scmBatchList := List.push(List.toArray(pList), scmBatchList);
+                    scmBatchList := List.push(List.toArray(List.reverse(pList)), scmBatchList);
                     for (p in List.toIter(pList)){
                         Map.delete(model.proposalsLookup, nhash, p.proposalData.id);
                     };
@@ -173,7 +173,8 @@ module{
                 } else if (List.size(pList) > PENDING_SCM_LIMIT){
                     logService.addLog(#Info, "Sending pending list cause too may entries", null);
                     let chunks = List.chunks(PENDING_SCM_LIMIT, pList);
-                    ignore List.filter(chunks, func(chunk : List.List<Proposal>) : Bool{
+                    //filter chunks big enough
+                    let l = List.filter(chunks, func(chunk : List.List<Proposal>) : Bool{
                         if(List.size(chunk) == PENDING_SCM_LIMIT){
                             for (p in List.toIter(chunk) ){
                                 Map.delete(model.proposalsLookup, nhash, p.proposalData.id);
@@ -181,11 +182,11 @@ module{
                             return true;
                         };
                         return false;
-                    }) |>
-                    List.map(_, func(chunk : List.List<Proposal>) : [Proposal] {
-                         scmBatchList := List.push(List.toArray(chunk), scmBatchList);
-                         return List.toArray(chunk);
                     });
+
+                    for(chunk in List.toIter(l)){
+                        scmBatchList := List.push(List.toArray(List.reverse(chunk)), scmBatchList);
+                    };
                 };
             };
 
@@ -482,7 +483,6 @@ module{
                 case(_){};
             }
         };
-
 
         func createProposalChannelThread(communityId : Text, channelId : Nat, proposal : Proposal) : async* (){
             //logService.addLog(#Info, "[createProposalThread] Creating proposal thread: " # Nat.toText(proposal.id) # " messageIndex: " # Nat32.toText(Option.get(messageIndex, Nat32.fromNat(0))));
