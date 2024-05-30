@@ -42,6 +42,7 @@ module {
       var botName = null;
       var botDisplayName = null;
       groups = Map.new<Text, ()>();
+      
       //var lastMessageId = 0;
     }
   };
@@ -153,6 +154,8 @@ module {
       }
     };
 
+
+    //todo; return patterns and create to string method instead
     public func joinCommunity(communityCanisterId : Text, inviteCode : ?Nat64) : async* Result.Result<Text, Text>{
       let indexCanister = await* localCommunityIndex(communityCanisterId);
       switch(indexCanister){
@@ -281,6 +284,22 @@ module {
       };
     };
 
+    public func sendChannelMessage(communityCanisterId : Text, channelId: Nat, content : OCApi.MessageContent, threadIndexId : ?Nat32) : async* Result.Result<OCApi.SendMessageResponse, Text>{
+      let seed : Nat64 = Nat64.fromIntWrap(Time.now());
+      let rng = Prng.Seiran128();
+      rng.init(seed);
+      let id = Nat64.toNat(rng.next());
+      let res = await* ocService.sendChannelMessage(communityCanisterId, channelId, Option.get(botModel.botName, ""), botModel.botDisplayName, content, id, threadIndexId);
+      switch(res){
+        case(#ok(data)){
+          return #ok(data)
+        };
+        case(#err(e)){
+          #err(e)
+        };
+      };
+    };
+
     public func sendGroupMessage(groupCanisterId : Text, content : OCApi.MessageContentInitial, threadIndexId : ?Nat32) : async* Result.Result<T.SendMessageResponse, Text>{
       let seed : Nat64 = Nat64.fromIntWrap(Time.now());
       let rng = Prng.Seiran128();
@@ -356,7 +375,6 @@ module {
     public func editTextGroupMessage(groupCanisterId : Text, messageId : OCApi.MessageId, newContent : Text) : async* Result.Result<OCApi.EditMessageResponse, Text>{
       await* editGroupMessage(groupCanisterId, messageId, #Text({text = newContent}));
     };
-
 
     public func getGroupMessagesByIndex(groupCanisterId : Text, indexes : [Nat32] ,latest_known_update : ?Nat64) : async* Result.Result<OCApi.MessagesResponse, Text> {
       let #ok(res) = await* ocService.messagesByMessageIndex(groupCanisterId, {
