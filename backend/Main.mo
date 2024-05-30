@@ -69,57 +69,6 @@ shared ({ caller }) actor class OCBot() = Self {
     }
   };
 
-  public func testSendChannelMessage(communityCanisterId : Text, channelId : Nat, text : Text) : async Result.Result<OCApi.SendMessageResponse, Text>{
-    let seed : Nat64 = Nat64.fromIntWrap(Time.now());
-    let rng = Prng.Seiran128();
-    rng.init(seed);
-    let id = Nat64.toNat(rng.next());
-    await* ocService.sendChannelMessage(communityCanisterId, channelId, "test_bot", null, #Text({text = text}), id,  null)
-  };
-
-  public func testUserSummary(userId : ?Principal, username : ?Text) : async Result.Result<OCApi.UserSummaryResponse, Text>{
-    await* ocService.userSummary("4bkt6-4aaaa-aaaaf-aaaiq-cai", {userId = userId; username= username});
-  };
-
-  public func testJoinCommunity(communityCanisterId : Text, inviteCode : ?Nat64) : async Result.Result<Text, Text>{
-    await* botService.joinCommunity(communityCanisterId : Text, inviteCode : ?Nat64);
-  };
-
-  public func testJoinChannel(communityCanisterId : Text, channelId : Nat, inviteCode : ?Nat64) : async Result.Result<Text, Text>{
-    await* botService.joinChannel(communityCanisterId : Text,  channelId, inviteCode : ?Nat64);
-  };
-
-  public func testCommunitySummary() : async Result.Result<OCApi.CommunitySummaryResponse, Text>{
-    await* ocService.publicCommunitySummary("x5c7v-eyaaa-aaaar-bfcca-cai", {
-      invite_code= null;
-    });
-  };
-
-  public func testAddSubscriber(sub : PB.Subscriber, inviteCode : ?Nat64) : async Result.Result<(), Text>{
-   await* proposalBot.addSubscriber(sub, inviteCode);
-  };
-
-  public func testGetSubscribers() : async [PB.Subscriber] {
-    proposalBot.getSubscribers();
-  };
-
-  // public query func testGetHash() : async ?Text{
-  //  TU.extractGitHash();
-  // };
-
-  public func testListProposals(start : Nat) : async Result.Result<Nat, Text>{
-   let res = await* proposalService.listProposalsAfterd("rrkah-fqaaa-aaaaa-aaaaq-cai", ?start, {PS.ListProposalArgsDefault() with omitLargeFields = ?true});
-
-    switch(res){
-      case(#ok(data)){
-       #ok(Array.size(data.proposal_info));
-      };
-      case(#err(err)){
-       #err(err)
-      }
-    }
-  };
-
   public func initTimer<system>(_tickrateInSeconds : ?Nat) : async Result.Result<(), Text> {
       await proposalBot.initTimer(_tickrateInSeconds);
   };
@@ -135,6 +84,62 @@ shared ({ caller }) actor class OCBot() = Self {
   public func update(start : ?Nat) : async () {
     await proposalBot.update(start);
   };
+
+  public func addSubscriber(sub : PB.Subscriber, inviteCode : ?Nat64) : async Result.Result<(), Text>{
+   await* proposalBot.addSubscriber(sub, inviteCode);
+  };
+
+  public func getSubscribers() : async [PB.Subscriber] {
+    proposalBot.getSubscribers();
+  };
+
+  public func deleteSubscriber(id : Text) : async Result.Result<(), Text>{
+    proposalBot.deleteSubscriber(id);
+  };
+
+  public func updateSubscriber(id : Text, newTopics : [Int32]) : async Result.Result<(), Text>{
+    proposalBot.updateSubscriber(id, newTopics);
+  };
+
+  
+  public func testJoinCommunity(communityCanisterId : Text, inviteCode : ?Nat64) : async Result.Result<Text, Text>{
+    await* botService.joinCommunity(communityCanisterId : Text, inviteCode : ?Nat64);
+  };
+
+  public func testJoinChannel(communityCanisterId : Text, channelId : Nat, inviteCode : ?Nat64) : async Result.Result<Text, Text>{
+    await* botService.joinChannel(communityCanisterId : Text,  channelId, inviteCode : ?Nat64);
+  };
+
+  public func testCommunitySummary() : async Result.Result<OCApi.CommunitySummaryResponse, Text>{
+    await* ocService.publicCommunitySummary("x5c7v-eyaaa-aaaar-bfcca-cai", {
+      invite_code= null;
+    });
+  };
+
+  public func testListProposals(start : Nat) : async Result.Result<Nat, Text>{
+   let res = await* proposalService.listProposalsAfterd("rrkah-fqaaa-aaaaa-aaaaq-cai", ?start, {PS.ListProposalArgsDefault() with omitLargeFields = ?true});
+
+    switch(res){
+      case(#ok(data)){
+       #ok(Array.size(data.proposal_info));
+      };
+      case(#err(err)){
+       #err(err)
+      }
+    }
+  };
+
+  // public func testSendChannelMessage(communityCanisterId : Text, channelId : Nat, text : Text) : async Result.Result<OCApi.SendMessageResponse, Text>{
+  //   let seed : Nat64 = Nat64.fromIntWrap(Time.now());
+  //   let rng = Prng.Seiran128();
+  //   rng.init(seed);
+  //   let id = Nat64.toNat(rng.next());
+  //   await* ocService.sendChannelMessage(communityCanisterId, channelId, "test_bot", null, #Text({text = text}), id,  null)
+  // };
+
+  // public func testUserSummary(userId : ?Principal, username : ?Text) : async Result.Result<OCApi.UserSummaryResponse, Text>{
+  //   await* ocService.userSummary("4bkt6-4aaaa-aaaaf-aaaiq-cai", {userId = userId; username= username});
+  // };
 
   //////////////////////////
   ////////////////// TEST ENDPOINTS

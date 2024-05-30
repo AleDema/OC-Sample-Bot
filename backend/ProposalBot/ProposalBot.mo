@@ -144,6 +144,7 @@ module{
                     };
                     case(#SCM){
                         let proposalHash = TU.extractGitHash(proposal.proposalData.title, proposal.proposalData.description);
+                        //logService.logInfo("Proposal ID: " # Nat.toText(proposal.proposalData.id) #  " has git hash: " # Option.get(proposalHash, "Null") # " Description: " # Option.get(proposal.proposalData.description, "null"), ?"[getUpdateBatch]");
                         if(TU.isSeparateBuildProcess(proposal.proposalData.title) or Option.isNull(proposalHash)){
                             if(Option.isSome(proposal.messageIndex) or proposal.attempts > 3){
                                 scmList := List.push(proposal, scmList);
@@ -182,13 +183,13 @@ module{
                         return false;
                     }) |>
                     List.map(_, func(chunk : List.List<Proposal>) : [Proposal] {
-                         scmBatchList := List.push(List.toArray(List.reverse(chunk)), scmBatchList);
+                         scmBatchList := List.push(List.toArray(chunk), scmBatchList);
                          return List.toArray(chunk);
                     });
                 };
             };
 
-            return (List.toArray(List.reverse(rvmList)), List.toArray(List.reverse(scmList)), scmBatchList);
+            return (List.toArray(List.reverse(rvmList)), List.toArray(List.reverse(scmList)), List.reverse(scmBatchList));
 
         };
 
@@ -200,12 +201,12 @@ module{
                             switch(T.topicIdToVariant(tid)){
                                 case(#RVM){
                                     for(p in rvmList.vals()){
-                                        await* createProposalGroupThread(group.groupCanister, p.proposalData, p.messageIndex)
+                                        await* createProposalGroupThread(group.groupCanister, p)
                                     };
                                 };
                               case(#SCM){
                                     for(p in scmList.vals()){
-                                        await* createProposalGroupThread(group.groupCanister, p.proposalData, p.messageIndex)
+                                        await* createProposalGroupThread(group.groupCanister, p)
                                     };
 
                                     for(chunk in List.toIter(scmBatchList)){
@@ -222,10 +223,18 @@ module{
                         for(tid in channel.topics.vals()){
                             switch(T.topicIdToVariant(tid)){
                                 case(#RVM){
-
-                              };
+                                    for(p in rvmList.vals()){
+                                        await* createProposalChannelThread(channel.communityCanister, channel.channelId, p)
+                                    };
+                                };
                               case(#SCM){
+                                for(p in scmList.vals()){
+                                    await* createProposalChannelThread(channel.communityCanister, channel.channelId, p)
+                                };
 
+                                for(chunk in List.toIter(scmBatchList)){
+                                    await* createBatchChannelThread(channel.communityCanister, channel.channelId, chunk)
+                                };
                               };
                               case(_){};
                             }
@@ -249,6 +258,7 @@ module{
 
             let res = await* proposalService.listProposalsAfterd(GOVERNANCE_ID, after, {PS.ListProposalArgsDefault()
                 with excludeTopic = topics;
+                omitLargeFields = ?false;
             });
 
             updateInternalState(res);
@@ -375,6 +385,7 @@ module{
                         return #err("Subscriber already exists");
                     };
                     let res = await* botService.joinCommunity(data.communityCanister, inviteCode : ?Nat64);
+                    Map.set(model.subscribers, thash, Nat.toText(data.channelId), subscriber); //TODO: fix idl error
                     switch(res){
                         case(#ok(_)){
                             let res2 = await* botService.joinChannel(data.communityCanister, data.channelId, inviteCode);
@@ -397,6 +408,37 @@ module{
             #ok();
         };
 
+        public func updateSubscriber(id : Text, newTopics : [Int32]) : Result.Result<(), Text> {
+            switch(Map.get(model.subscribers, thash, id)){
+                case(?val){
+                    switch(val){
+                        case(#Group(data)){
+                            Map.set(model.subscribers, thash, id, #Group({data with topics = newTopics}));
+                        };
+                        case(#Channel(data)){
+                            Map.set(model.subscribers, thash, id, #Channel({data with topics = newTopics}));
+                        }
+                    };
+
+                    #ok();
+                };
+                case(_){
+                    return #err("Subscriber does not exist");
+                };
+            }
+        };
+
+        public func deleteSubscriber(id : Text) : Result.Result<(), Text>{
+            switch(Map.remove(model.subscribers, thash, id)){
+                case(?val){
+                    #ok();
+                };
+                case(_){
+                    return #err("Subscriber does not exist");
+                };
+            }
+        };
+
         public func getSubscribers() : [Subscriber]{
             return Map.toArrayMap<Text, Subscriber, Subscriber>(model.subscribers, func (k : Text, v : Subscriber) : ?Subscriber {
                 return ?v;
@@ -404,16 +446,16 @@ module{
         };
 
 
-        func createProposalGroupThread(targetGroupId : Text, proposal : TT.ProposalAPI, messageIndex : ?Nat32) : async* (){
+        func createProposalGroupThread(targetGroupId : Text, proposal : Proposal) : async* (){
             //logService.addLog(#Info, "[createProposalThread] Creating proposal thread: " # Nat.toText(proposal.id) # " messageIndex: " # Nat32.toText(Option.get(messageIndex, Nat32.fromNat(0))));
-            let text = TU.formatProposal(proposal);
+            let text = TU.formatProposal(proposal.proposalData);
             let res = await* botService.sendTextGroupMessage(targetGroupId, text, null);
 
             switch(res){
                 case(#ok(data)){
                     switch(data){
                         case(#Success(d)){
-                            let text2 = TU.formatProposalThreadMsg(VOTING_GROUP_ID, proposal.id, messageIndex);
+                            let text2 = TU.formatProposalThreadMsg(VOTING_GROUP_ID, proposal.proposalData.id, proposal.messageIndex);
                             let res = await* botService.sendTextGroupMessage(targetGroupId, text2, ?d.message_index);
                         };
                         case(_){};
@@ -442,7 +484,7 @@ module{
         };
 
 
-        func createProposalChannelThread(communityId : Text, channelId : Nat, proposal : Proposal, messageIndex : ?Nat32) : async* (){
+        func createProposalChannelThread(communityId : Text, channelId : Nat, proposal : Proposal) : async* (){
             //logService.addLog(#Info, "[createProposalThread] Creating proposal thread: " # Nat.toText(proposal.id) # " messageIndex: " # Nat32.toText(Option.get(messageIndex, Nat32.fromNat(0))));
             let text = TU.formatProposal(proposal.proposalData);
             let res = await* botService.sendChannelMessage(communityId, channelId, #Text({text = text}), null);
@@ -451,7 +493,7 @@ module{
                 case(#ok(data)){
                     switch(data){
                         case(#Success(d)){
-                            let text2 = TU.formatProposalThreadMsg(VOTING_GROUP_ID, proposal.proposalData.id, messageIndex);
+                            let text2 = TU.formatProposalThreadMsg(VOTING_GROUP_ID, proposal.proposalData.id, proposal.messageIndex);
                             let res = await* botService.sendChannelMessage(communityId, channelId, #Text({text = text2}), ?d.message_index);
                         };
                         case(_){};
