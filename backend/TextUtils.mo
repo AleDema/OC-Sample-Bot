@@ -64,29 +64,25 @@ module {
     return false
   };
 
-
+  let patterns = ["Git hash: ", "### Git Hash: "]; //"### Git Commit Hash: "
   public func extractGitHash(title : Text, description : ?Text) : ?Text {
     let #ok(descr) = Utils.optToRes(description)
     else{
       return null
     };
 
-   if(Text.contains(title, #text "with hash")) {
-      let lines = Iter.toArray(Text.split(descr, #char '\n'));
+    let lines = Iter.toArray(Text.split(descr, #char '\n'));
 
-      for (line in Array.vals(lines)) {
-          if (Text.startsWith(line, #text "Git hash: ")) {
-              var hash = Text.trimStart(line, #text "Git Hash: ");
-              return ?Text.trim(hash, #char ' ');
-          } else if(Text.startsWith(line, #text "### Git Hash: ")){
-              var hash = Text.trimStart(line, #text "### Git Hash: ");
-              return ?Text.trim(hash, #char ' ');
-          };
-      };
+    for (line in Array.vals(lines)) {
+      for(pattern in Array.vals(patterns)) {
+        if(Text.startsWith(line, #text pattern)) {
+          var hash = Text.trimStart(line, #text pattern);
+          return ?Text.trim(Text.trim(hash, #char ' '), #char '`');
+        };
+      }
+    };
 
-   };
     return null;
-
   };
 
 
