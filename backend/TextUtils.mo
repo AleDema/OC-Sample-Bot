@@ -68,18 +68,22 @@ module {
   public func extractGitHash(title : Text, description : ?Text) : ?Text {
     let #ok(descr) = Utils.optToRes(description)
     else{
-      return null;
+      return null
     };
 
    if(Text.contains(title, #text "with hash")) {
       let lines = Iter.toArray(Text.split(descr, #char '\n'));
 
       for (line in Array.vals(lines)) {
-          if (Text.startsWith(line, #text "Git Hash: ")) {
+          if (Text.startsWith(line, #text "Git hash: ")) {
               var hash = Text.trimStart(line, #text "Git Hash: ");
+              return ?Text.trim(hash, #char ' ');
+          } else if(Text.startsWith(line, #text "### Git Hash: ")){
+              var hash = Text.trimStart(line, #text "### Git Hash: ");
               return ?Text.trim(hash, #char ' ');
           };
       };
+
    };
     return null;
 
