@@ -62,9 +62,9 @@ module{
     let MAX_TICKS_WITHOUT_UPDATE = 3;
 
     let NNS_PROPOSAL_GROUP_ID = "labxu-baaaa-aaaaf-anb4q-cai";
-    let TEST_GROUP_ID = "evg6t-laaaa-aaaar-a4j5q-cai";
+    //let TEST_GROUP_ID = "evg6t-laaaa-aaaar-a4j5q-cai";
     let GOVERNANCE_ID = "rrkah-fqaaa-aaaaa-aaaaq-cai";
-    let VOTING_GROUP_ID = "6q22t-qaaaq-aaaaf-aaamq-cai";
+    //let VOTING_GROUP_ID = "6q22t-qaaaq-aaaaf-aaamq-cai";
     
     public class ProposalBot(model : ProposalBotModel, botService : BT.BotService, proposalService : PS.ProposalService, logService : LT.LogService) = {
         var updateState : UpdateState = #Stopped;
@@ -456,7 +456,7 @@ module{
                 case(#ok(data)){
                     switch(data){
                         case(#Success(d)){
-                            let text2 = TU.formatProposalThreadMsg(VOTING_GROUP_ID, proposal.proposalData.id, proposal.messageIndex);
+                            let text2 = TU.formatProposalThreadMsg(NNS_PROPOSAL_GROUP_ID, proposal.proposalData.id, proposal.messageIndex);
                             let res = await* botService.sendTextGroupMessage(targetGroupId, text2, ?d.message_index);
                         };
                         case(_){};
@@ -477,7 +477,7 @@ module{
             };
             switch(res){
                 case(#Success(d)){
-                    let text2 = TU.formatBatchProposalThreadMsg(VOTING_GROUP_ID, proposalList);
+                    let text2 = TU.formatBatchProposalThreadMsg(NNS_PROPOSAL_GROUP_ID, proposalList);
                     let res = await* botService.sendTextGroupMessage(targetGroupId, text2, ?d.message_index);
                 };
                 case(_){};
@@ -493,7 +493,7 @@ module{
                 case(#ok(data)){
                     switch(data){
                         case(#Success(d)){
-                            let text2 = TU.formatProposalThreadMsg(VOTING_GROUP_ID, proposal.proposalData.id, proposal.messageIndex);
+                            let text2 = TU.formatProposalThreadMsg(NNS_PROPOSAL_GROUP_ID, proposal.proposalData.id, proposal.messageIndex);
                             let res = await* botService.sendChannelMessage(communityId, channelId, #Text({text = text2}), ?d.message_index);
                         };
                         case(_){};
@@ -514,7 +514,7 @@ module{
             };
             switch(res){
                 case(#Success(d)){
-                    let text2 = TU.formatBatchProposalThreadMsg(VOTING_GROUP_ID, proposalList);
+                let text2 = TU.formatBatchProposalThreadMsg(NNS_PROPOSAL_GROUP_ID, proposalList);
                    let res = await* botService.sendChannelMessage(communityId, channelId, #Text({text = text2}), ?d.message_index);
                 };
                 case(_){};
