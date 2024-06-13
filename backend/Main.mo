@@ -26,8 +26,8 @@ import TT "./TrackerTypes";
 import LS "./Log/LogService";
 import LT "./Log/LogTypes";
 import {  nhash; n64hash; n32hash; thash } "mo:map/Map";
-import BT "./OC/BotTypes";
-import BS "./OC/BotService";
+import BT "./Bot/BotTypes";
+import BS "./Bot/BotService";
 import OCS "./OC/OCService";
 import OCApi "./OC/OCApi";
 import GS "./Governance/GovernanceService";
@@ -36,10 +36,13 @@ import PS "./Proposal/ProposalService";
 import PB "./ProposalBot/ProposalBot";
 import DateTime "mo:datetime/DateTime";
 import Prng "mo:prng";
+
+  //TODO connect with OC msg index for GAAS
+
 shared ({ caller }) actor class OCBot() = Self {
 
   let NNS_PROPOSAL_GROUP_ID = "labxu-baaaa-aaaaf-anb4q-cai";
-  let TEST_GROUP_ID = "evg6t-laaaa-aaaar-a4j5q-cai";
+  //let TEST_GROUP_ID = "evg6t-laaaa-aaaar-a4j5q-cai";
 
   stable var custodians = List.make<Principal>(caller);
 
@@ -62,9 +65,9 @@ shared ({ caller }) actor class OCBot() = Self {
 
   system func postupgrade() {
     if(Option.isSome(proposalBotData.timerId)){
-        proposalBotData.timerId := ?Timer.recurringTimer<system>(#seconds(5* 6), func() : async () {
+        proposalBotData.timerId := ?Timer.recurringTimer<system>(#seconds(5* 60), func() : async () {
         await proposalBot.update(proposalBotData.lastProposalId);
-        });
+      });
     }
   };
 
@@ -72,7 +75,14 @@ shared ({ caller }) actor class OCBot() = Self {
       await proposalBot.initTimer(_tickrateInSeconds);
   };
 
-  public func cancelTimer() : async Result.Result<(), Text> {
+  public shared({caller}) func initBot<system>(name : Text, _displayName : ?Text) : async Result.Result<(), Text> {
+    // if (not G.isCustodian(caller, custodians)) {
+    //   return #err("Not authorized: " # Principal.toText(caller));
+    // };
+    await botService.initBot(name : Text, _displayName : ?Text);
+  };
+
+  public shared({caller}) func cancelTimer() : async Result.Result<(), Text> {
     if (not G.isCustodian(caller, custodians)) {
       return #err("Not authorized");
     };
@@ -80,11 +90,19 @@ shared ({ caller }) actor class OCBot() = Self {
     await proposalBot.cancelTimer();
   };
 
-  public func update(start : ?Nat) : async () {
+  public shared({caller}) func update(start : ?Nat) : async () {
+    // if (not G.isCustodian(caller, custodians)) {
+    //   return
+    // };
+
     await proposalBot.update(start);
   };
 
-  public func addSubscriber(sub : PB.Subscriber, inviteCode : ?Nat64) : async Result.Result<(), Text>{
+  public shared({caller}) func addSubscriber(sub : PB.Subscriber, inviteCode : ?Nat64) : async Result.Result<(), Text>{
+    // if (not G.isCustodian(caller, custodians)) {
+    //   return #err("Not authorized");
+    // };
+
    await* proposalBot.addSubscriber(sub, inviteCode);
   };
 
@@ -92,41 +110,102 @@ shared ({ caller }) actor class OCBot() = Self {
     proposalBot.getSubscribers();
   };
 
-  public func deleteSubscriber(id : Text) : async Result.Result<(), Text>{
+  public shared({caller}) func deleteSubscriber(id : Text) : async Result.Result<(), Text>{
+    // if (not G.isCustodian(caller, custodians)) {
+    //   return #err("Not authorized");
+    // };
+    
     proposalBot.deleteSubscriber(id);
   };
 
-  public func updateSubscriber(id : Text, newTopics : [Int32]) : async Result.Result<(), Text>{
+  public shared({caller}) func updateSubscriber(id : Text, newTopics : [Int32]) : async Result.Result<(), Text>{
+    if (not G.isCustodian(caller, custodians)) {
+      return #err("Not authorized");
+    };
+    
     proposalBot.updateSubscriber(id, newTopics);
   };
 
-  
-  public func testJoinCommunity(communityCanisterId : Text, inviteCode : ?Nat64) : async Result.Result<Text, Text>{
+  public shared({caller}) func tryJoinCommunity(communityCanisterId : Text, inviteCode : ?Nat64) : async Result.Result<Text, Text>{
+    if (not G.isCustodian(caller, custodians)) {
+      return #err("Not authorized");
+    };
+    
     await* botService.joinCommunity(communityCanisterId : Text, inviteCode : ?Nat64);
   };
 
-  public func testJoinChannel(communityCanisterId : Text, channelId : Nat, inviteCode : ?Nat64) : async Result.Result<Text, Text>{
+  public shared({caller}) func tryJoinChannel(communityCanisterId : Text, channelId : Nat, inviteCode : ?Nat64) : async Result.Result<Text, Text>{
+    // if (not G.isCustodian(caller, custodians)) {
+    //   return #err("Not authorized");
+    // };
+
     await* botService.joinChannel(communityCanisterId : Text,  channelId, inviteCode : ?Nat64);
   };
 
-  public func testCommunitySummary() : async Result.Result<OCApi.CommunitySummaryResponse, Text>{
-    await* ocService.publicCommunitySummary("x5c7v-eyaaa-aaaar-bfcca-cai", {
-      invite_code= null;
-    });
-  };
+  // public func testGetProposalMessage(proposalId : Nat) : async Result.Result<Text, Text> {
 
-  public func testListProposals(start : Nat) : async Result.Result<Nat, Text>{
-   let res = await* proposalService.listProposalsAfterd("rrkah-fqaaa-aaaaa-aaaaq-cai", ?start, {PS.ListProposalArgsDefault() with omitLargeFields = ?true});
+  //   var index = switch(await* botService.getLatestGroupMessageIndex(NNS_PROPOSAL_GROUP_ID)){
+  //       case(?index){index};
+  //       case(_){
+  //           logService.addLog(#Info, "getLatestMessageIndex error", null);
+  //           return #err("Error")
+  //       };
+  //   };
 
-    switch(res){
-      case(#ok(data)){
-       #ok(Array.size(data.proposal_info));
-      };
-      case(#err(err)){
-       #err(err)
-      }
-    }
-  };
+  //   let #ok(res) = await* botService.getGroupMessagesByIndex(NNS_PROPOSAL_GROUP_ID, [index], null)
+  //   else{
+  //     return #err("Error getGroupMessagesByIndex");
+  //   };
+    
+  //   for (message in Array.vals(res.messages)){
+  //       switch(botService.getNNSProposalMessageData(message)){
+  //         case(#ok(proposalData)){
+  //           if (proposalId > Nat64.toNat(proposalData.proposalId)){
+  //             return #err("not yet in group")
+  //           };
+
+  //           let diff = Nat64.toNat(proposalData.proposalId) - proposalId ;
+  //           let #ok(res) = await* botService.getGroupMessagesByIndex(NNS_PROPOSAL_GROUP_ID, [index - Nat32.fromNat(diff)], null)
+  //           else{
+  //             return #err("Error getGroupMessagesByIndex");
+  //           };
+  //           for (message in Array.vals(res.messages)){
+  //             switch(botService.getNNSProposalMessageData(message)){
+  //               case(#ok(proposalData)){
+  //                 return #ok(Nat64.toText(proposalData.proposalId));
+  //               };
+  //               case(_){
+  //                 return #err("Error getNNSProposalMessageData")
+  //               };
+  //             };
+  //           };
+  //         };
+  //         case(_){
+  //         return #err("Error getNNSProposalMessageData")
+  //       };
+  //       };
+  //   };
+  //   #ok("not found")
+  // };
+
+  // public func testCommunitySummary() : async Result.Result<OCApi.CommunitySummaryResponse, Text>{
+  //   await* ocService.publicCommunitySummary("x5c7v-eyaaa-aaaar-bfcca-cai", {
+  //     invite_code= null;
+  //   });
+  // };
+
+  // public func testListProposals(start : Nat) : async Result.Result<Nat, Text>{
+  //  let res = await* proposalService.listProposalsAfterId("rrkah-fqaaa-aaaaa-aaaaq-cai", ?start, {PS.ListProposalArgsDefault() with omitLargeFields = ?true});
+
+  //   switch(res){
+  //     case(#ok(data)){
+  //      #ok(Array.size(data.proposal_info));
+  //     };
+  //     case(#err(err)){
+  //      #err(err)
+  //     }
+  //   }
+  // };
 
   // public func testSendChannelMessage(communityCanisterId : Text, channelId : Nat, text : Text) : async Result.Result<OCApi.SendMessageResponse, Text>{
   //   let seed : Nat64 = Nat64.fromIntWrap(Time.now());
@@ -144,15 +223,19 @@ shared ({ caller }) actor class OCBot() = Self {
   ////////////////// TEST ENDPOINTS
   //////////////////////////
 
-  public func testDate(secs : Int) : async Text{
-    let fmt = "YYYY-MM-DD HH:mm";
-    let date = DateTime.DateTime(secs * 1_000_000_000); //secs to nano
-    DateTime.toTextAdvanced(date, #custom({format = fmt; locale = null}))
-  };
+  // public func testDate(secs : Int) : async Text{
+  //   let fmt = "YYYY-MM-DD HH:mm";
+  //   let date = DateTime.DateTime(secs * 1_000_000_000); //secs to nano
+  //   DateTime.toTextAdvanced(date, #custom({format = fmt; locale = null}))
+  // };
 
 
   //////////////////PROPOSAL BOT
-  public func testSetLastProposalId(proposalId : Nat) : async () {
+  public shared({caller}) func testSetLastProposalId(proposalId : Nat) : async () {
+    // if (not G.isCustodian(caller, custodians)) {
+    //   return
+    // };
+
     proposalBotData.lastProposalId := ?proposalId;
   };
 
@@ -168,11 +251,18 @@ shared ({ caller }) actor class OCBot() = Self {
   //   proposalBotData.pendingSCMList := List.nil<TT.ProposalAPI>();
   // };
 
-  public func testGetProposalsLookup() : async [(Nat, {proposalData : TT.ProposalAPI; messageIndex : ?Nat32; attempts : Nat})] {
-    Map.toArray(proposalBotData.proposalsLookup);
+  public func testGetProposalsLookup() : async [{proposalId : Nat; topicId : Int32; messageIndex : ?Nat32; attempts : Nat}] {
+    Map.toArrayMapDesc<Nat, {proposalData : TT.ProposalAPI; messageIndex : ?Nat32; attempts : Nat}, {proposalId : Nat; topicId : Int32; messageIndex : ?Nat32; attempts : Nat}>(proposalBotData.proposalsLookup,
+    func (k, v) : ?{proposalId : Nat; topicId : Int32; messageIndex : ?Nat32; attempts : Nat} {
+      return ?{proposalId = k; topicId = v.proposalData.topicId; messageIndex = v.messageIndex; attempts = v.attempts};
+    });
   };
 
-  public func testClearProposalsLookup() : async (){
+  public shared({caller}) func testClearProposalsLookup() : async (){
+    // if (not G.isCustodian(caller, custodians)) {
+    //   return
+    // };
+    
     Map.clear(proposalBotData.proposalsLookup);
   };
 
@@ -180,11 +270,19 @@ shared ({ caller }) actor class OCBot() = Self {
     proposalBotData.latestNNSMessageIndex;
   };
 
-  public func testSetLatestNNSMessageIndex(index :?Nat32) : async (){
+  public shared({caller}) func testSetLatestNNSMessageIndex(index :?Nat32) : async (){
+    if (not G.isCustodian(caller, custodians)) {
+      return
+    };
+    
     proposalBotData.latestNNSMessageIndex := index;
   };
 
-  public func testResetState() : async (){
+  public shared({caller}) func testResetState() : async (){
+    // if (not G.isCustodian(caller, custodians)) {
+    //   return
+    // };
+    
     Map.clear(proposalBotData.proposalsLookup);
     proposalBotData.latestNNSMessageIndex := null;
   };
@@ -195,9 +293,9 @@ shared ({ caller }) actor class OCBot() = Self {
     botService.getBotStatus();
   };
 
-  public func setBotStatus() {
-    botService.setBotStatus();
-  };
+  // public func setBotStatus() {
+  //   botService.setBotStatus();
+  // };
 
   // public shared({caller}) func joinTestGroup() : async Result.Result<Text, Text>{
   //   if (not G.isCustodian(caller, custodians)) {
@@ -279,20 +377,20 @@ shared ({ caller }) actor class OCBot() = Self {
   // };
 
   
-  public func testRange(start: Int, end: Nat) : async Result.Result<([OCApi.MessageEventWrapper], [Nat32]), ()>{
-    let indexVec = Iter.range(end, start) |> 
-                      Iter.map(_, func (n : Nat) : Nat32 {Nat32.fromNat(n)}) |> 
-                        Iter.toArray(_);
+  // public func testRange(start: Int, end: Nat) : async Result.Result<([OCApi.MessageEventWrapper], [Nat32]), ()>{
+  //   let indexVec = Iter.range(end, start) |> 
+  //                     Iter.map(_, func (n : Nat) : Nat32 {Nat32.fromNat(n)}) |> 
+  //                       Iter.toArray(_);
 
-    let #ok(res) = await* botService.getGroupMessagesByIndex(NNS_PROPOSAL_GROUP_ID, indexVec, null)
-    else {
-      //Error retrieving messages
-      logService.addLog(#Error, "[testRange] Error retrieving messages", null);
-      return #err();
-    };
+  //   let #ok(res) = await* botService.getGroupMessagesByIndex(NNS_PROPOSAL_GROUP_ID, indexVec, null)
+  //   else {
+  //     //Error retrieving messages
+  //     logService.addLog(#Error, "[testRange] Error retrieving messages", null);
+  //     return #err();
+  //   };
 
-    #ok((res.messages, indexVec))
-  };
+  //   #ok((res.messages, indexVec))
+  // };
 
   //////////////////////////
   ////////////////// ADMIN
@@ -336,10 +434,11 @@ shared ({ caller }) actor class OCBot() = Self {
     logService.getLogs(filter);
   };
 
-  public func clearLogs() : async Result.Result<(), Text> {
+  public shared({caller}) func clearLogs() : async Result.Result<(), Text> {
     if (not G.isCustodian(caller, custodians)) {
       return #err("Not authorized");
     };
+
     logService.clearLogs();
     #ok()
   };
