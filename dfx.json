@@ -3,6 +3,10 @@
     "OCBot": {
       "type": "motoko",
       "main": "backend/Main.mo"
+    },
+    "CG_Bot": {
+      "type": "motoko",
+      "main": "backend/Main.mo"
     }
   },
   "defaults": {
@@ -11,5 +15,6 @@
     }
   },
   "output_env_file": ".env",
-  "version": 2
+  "version": 2,
+  "dfx": "0.20.1"
 }
