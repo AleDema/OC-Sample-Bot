@@ -9,7 +9,7 @@ import Nat32 "mo:base/Nat32";
 import Nat64 "mo:base/Nat64";
 import Map "mo:map/Map";
 import TT "../TrackerTypes";
-import BT "../OC/BotTypes";
+import BT "../Bot/BotTypes";
 import LT "../Log/LogTypes";
 import {  nhash; n64hash; n32hash; thash } "mo:map/Map";
 import TU "../TextUtils";
@@ -53,7 +53,6 @@ module{
             proposalsLookup : ProposalsLookup = Map.new();
             var numberOfTicksSinceUpdate = 0;
             subscribers : Map.Map<Text, Subscriber> = Map.new();
-
         }
     };
 
@@ -122,7 +121,7 @@ module{
                     };
                 };
                 case(#err(e)){
-                    logService.logError("listProposalsAfterd return err: " # e, null);
+                    logService.logError("listProposalsAfterId return err: " # e, null);
                 };
             };
         };
@@ -255,9 +254,10 @@ module{
             model.numberOfTicksSinceUpdate := model.numberOfTicksSinceUpdate + 1;
             logService.addLog(#Info, "[Running update] Number of ticks since last update: " # Nat.toText(model.numberOfTicksSinceUpdate), null);
             
-            let topics = PS.processIncludeTopics(GU.NNSFunctions,[8,13]);
+            let topics = PS.processIncludeTopics(GU.NNSFunctions, [8,13]);
 
-            let res = await* proposalService.listProposalsAfterd(GOVERNANCE_ID, after, {PS.ListProposalArgsDefault()
+            //TODO: In case of null, fetch active proposals
+            let res = await* proposalService.listProposalsAfterId(GOVERNANCE_ID, after, {PS.ListProposalArgsDefault()
                 with excludeTopic = topics;
                 omitLargeFields = ?false;
             });
@@ -299,43 +299,43 @@ module{
             var check = true;
             label attempts while (check){
 
-            //if model.latestNNSMessageIndex is null, get last BATCH_SIZE once
-            if(Option.isNull(model.latestNNSMessageIndex)){
-                logService.addLog(#Info, "[matchProposalsWithMessages] model.latestNNSMessageIndex is null", null);
-                check := false;
-            };
+                //if model.latestNNSMessageIndex is null, get last BATCH_SIZE once
+                if(Option.isNull(model.latestNNSMessageIndex)){
+                    logService.addLog(#Info, "[matchProposalsWithMessages] model.latestNNSMessageIndex is null", null);
+                    check := false;
+                };
 
 
-            var end = start - FIND_PROPOSALS_BATCH_SIZE;
-            if (end <= Option.get(model.latestNNSMessageIndex, end - 1)){
-                end := Option.get(model.latestNNSMessageIndex, Nat32.fromNat(0)) + 1;
-                check := false;
-                logService.addLog(#Info, "[matchProposalsWithMessages] reached end", null);
-            };
+                var end = start - FIND_PROPOSALS_BATCH_SIZE;
+                if (end <= Option.get(model.latestNNSMessageIndex, end - 1)){
+                    end := Option.get(model.latestNNSMessageIndex, Nat32.fromNat(0)) + 1;
+                    check := false;
+                    logService.addLog(#Info, "[matchProposalsWithMessages] reached end", null);
+                };
 
-            logService.addLog(#Info, "[matchProposalsWithMessages]start: " #  Nat32.toText(start) # " end: " # Nat32.toText(end), null);
-            //generate ranges for message indexes to fetch
-            let indexVec = Iter.range(Nat32.toNat(end), Nat32.toNat(start)) |> 
-                            Iter.map(_, func (n : Nat) : Nat32 {Nat32.fromNat(n)}) |> 
-                                Iter.toArray(_);
-        
-            start := end;
-
-            let #ok(res) = await* botService.getGroupMessagesByIndex(groupId, indexVec, null)
-            else {
-                //Error retrieving messages
-                logService.addLog(#Error, "Error retrieving messages", null);
-                continue attempts;
-            };
+                logService.addLog(#Info, "[matchProposalsWithMessages]start: " #  Nat32.toText(start) # " end: " # Nat32.toText(end), null);
+                //generate ranges for message indexes to fetch
+                let indexVec = Iter.range(Nat32.toNat(end), Nat32.toNat(start)) |> 
+                                Iter.map(_, func (n : Nat) : Nat32 {Nat32.fromNat(n)}) |> 
+                                    Iter.toArray(_);
             
-            let tempMap = Map.new<Nat, OC.MessageIndex>();
-            label messages for (message in Array.vals(res.messages)){ 
-                let #ok(proposalData) = botService.getNNSProposalMessageData(message)
-                    else {
-                    //This shouldn't happen unless OC changes something
-                    logService.addLog(#Error, "error in getNNSProposalMessageData()", null);
-                    continue messages;
-                    };
+                start := end;
+
+                let #ok(res) = await* botService.getGroupMessagesByIndex(groupId, indexVec, null)
+                else {
+                    //Error retrieving messages
+                    logService.addLog(#Error, "Error retrieving messages", null);
+                    continue attempts;
+                };
+                
+                let tempMap = Map.new<Nat, OC.MessageIndex>();
+                label messages for (message in Array.vals(res.messages)){ 
+                    let #ok(proposalData) = botService.getNNSProposalMessageData(message)
+                        else {
+                            //This shouldn't happen unless OC changes something
+                            logService.addLog(#Error, "error in getNNSProposalMessageData()", null);
+                            continue messages;
+                        };
                     //logService.addLog(#Info, "Test");
                     Map.set(tempMap, nhash, Nat64.toNat(proposalData.proposalId), proposalData.messageIndex);
                 };
@@ -343,15 +343,15 @@ module{
                 var f = true;
                 label process for ((k,v) in Map.entries(pending)){
                     if (Option.isNull(v.messageIndex)){
-                    f := false;
+                        f := false;
                     };
                     switch(Map.get(tempMap, nhash, k)){
-                    case(?val){
-                        Map.set(pending, nhash, k, {v with messageIndex = ?val});
-                    };
-                    case(_){
-                        Map.set(pending, nhash, k, {v with attempts = v.attempts + 1});
-                    }
+                        case(?val){
+                            Map.set(pending, nhash, k, {v with messageIndex = ?val});
+                        };
+                        case(_){
+                            Map.set(pending, nhash, k, {v with attempts = v.attempts + 1});
+                        }
                     }
                 };
                 //if all proposals have a message index, stop

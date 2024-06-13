@@ -10,6 +10,7 @@ import Int32 "mo:base/Int32";
 import Int64 "mo:base/Int64";
 import Nat64 "mo:base/Nat64";
 import Option "mo:base/Option";
+import Nat32 "mo:base/Nat32";
 import Utils "../Utils";
 
 
@@ -39,7 +40,7 @@ module{
         };
 
 
-        public func listProposalsAfterd(governanceId : Text, _after : ?Nat, args :  PT.ListProposalArgs) : async* Result.Result<GT.ListProposalInfoResponse, Text>{
+        public func listProposalsAfterId(governanceId : Text, _after : ?Nat, args :  PT.ListProposalArgs) : async* Result.Result<GT.ListProposalInfoResponse, Text>{
             let info = {
                 include_reward_status = args.includeRewardStatus;
                 omit_large_fields =  args.omitLargeFields;
@@ -51,7 +52,7 @@ module{
             };
             let #ok(after) = Utils.optToRes(_after)
             else{
-                return await* governanceService.listProposals(governanceId, info);
+                return await* governanceService.listProposals(governanceId, {info with limit = Nat32.fromNat(1);});
             };
             
             let proposalBuffer = Buffer.Buffer<GT.ProposalInfo>(BATCH_SIZE_LIMIT);
