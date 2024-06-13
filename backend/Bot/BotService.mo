@@ -19,8 +19,8 @@ import Map "mo:map/Map";
 import T "../Types";
 import TU "../TextUtils";
 import G "../Guards";
-import OC "./OCTypes";
-import OCApi "./OCApi";
+import OC "../OC/OCTypes";
+import OCApi "../OC/OCApi";
 import MT "../MetricTypes";
 import F "../Fixtures";
 import TT "../TrackerTypes";
@@ -56,7 +56,8 @@ module {
   let BOT_REGISTRATION_FEE: Nat = 10_000_000_000_000; // 10T
 
   public class BotServiceImpl(botModel : BT.BotModel, ocService : OC.OCService, logService : LT.LogService) = {
-    public func initBot<system>(name : Text, _displayName : ?Text) : async Result.Result<Text, Text>{
+
+    public func initBot<system>(name : Text, _displayName : ?Text) : async Result.Result<(), Text>{
       switch(botModel.botStatus){
         case(#NotInitialized){
           botModel.botStatus := #Initializing;
@@ -65,11 +66,15 @@ module {
           switch(res){
             case(#ok(data)){
               switch(data){
-                case (#Success or #AlreadyRegistered){
+                case (#Success){
                   botModel.botStatus := #Initialized;
                   botModel.botName := ?name;
                   botModel.botDisplayName := _displayName;
-                  return #ok("Initialized");
+                  return #ok();
+                };
+                case(#AlreadyRegistered){
+                  botModel.botStatus := #Initialized;
+                   return #err("AlreadyRegistered")
                 };
                 case (#InsufficientCyclesProvided(n)) {
                   botModel.botStatus := #NotInitialized;
@@ -85,9 +90,9 @@ module {
               botModel.botStatus := #NotInitialized;
               return #err("Error: " # msg);
             };
-            };
-            botModel.botStatus := #Initialized;
-            return #ok("Initialized")
+          };
+            // botModel.botStatus := #Initialized;
+            // return #ok()
         };
         case(#Initializing){
           return #err("Initializing")

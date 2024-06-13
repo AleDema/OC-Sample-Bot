@@ -4,7 +4,7 @@ import Nat "mo:base/Nat";
 import Nat64 "mo:base/Nat64";
 import Map "mo:map/Map";
 import T "../Types";
-import OCApi "./OCApi";
+import OCApi "../OC/OCApi";
 
 module {
 
@@ -24,7 +24,7 @@ module {
 
 
     public type BotService = {
-        initBot: (name : Text, _displayName : ?Text) -> async Result.Result<Text, Text>;
+        initBot: (name : Text, _displayName : ?Text) -> async Result.Result<(), Text>;
         joinGroup : (groupCanisterId : Text, inviteCode : ?Nat64) -> async* Result.Result<Text, Text>;
         sendGroupMessage : (groupCanisterId : Text, content : OCApi.MessageContentInitial, threadIndexId : ?Nat32) -> async* Result.Result<T.SendMessageResponse, Text>;
         sendTextGroupMessage : (groupCanisterId : Text, content : Text, threadIndexId : ?Nat32) -> async* Result.Result<T.SendMessageResponse, Text>;
