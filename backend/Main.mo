@@ -76,9 +76,9 @@ shared ({ caller }) actor class OCBot() = Self {
   };
 
   public shared({caller}) func initBot<system>(name : Text, _displayName : ?Text) : async Result.Result<(), Text> {
-    // if (not G.isCustodian(caller, custodians)) {
-    //   return #err("Not authorized: " # Principal.toText(caller));
-    // };
+    if (not G.isCustodian(caller, custodians)) {
+      return #err("Not authorized: " # Principal.toText(caller));
+    };
     await botService.initBot(name : Text, _displayName : ?Text);
   };
 
@@ -91,17 +91,17 @@ shared ({ caller }) actor class OCBot() = Self {
   };
 
   public shared({caller}) func update(start : ?Nat) : async () {
-    // if (not G.isCustodian(caller, custodians)) {
-    //   return
-    // };
+    if (not G.isCustodian(caller, custodians)) {
+      return
+    };
 
     await proposalBot.update(start);
   };
 
   public shared({caller}) func addSubscriber(sub : PB.Subscriber, inviteCode : ?Nat64) : async Result.Result<(), Text>{
-    // if (not G.isCustodian(caller, custodians)) {
-    //   return #err("Not authorized");
-    // };
+    if (not G.isCustodian(caller, custodians)) {
+      return #err("Not authorized");
+    };
 
    await* proposalBot.addSubscriber(sub, inviteCode);
   };
@@ -111,9 +111,9 @@ shared ({ caller }) actor class OCBot() = Self {
   };
 
   public shared({caller}) func deleteSubscriber(id : Text) : async Result.Result<(), Text>{
-    // if (not G.isCustodian(caller, custodians)) {
-    //   return #err("Not authorized");
-    // };
+    if (not G.isCustodian(caller, custodians)) {
+      return #err("Not authorized");
+    };
     
     proposalBot.deleteSubscriber(id);
   };
@@ -135,9 +135,9 @@ shared ({ caller }) actor class OCBot() = Self {
   };
 
   public shared({caller}) func tryJoinChannel(communityCanisterId : Text, channelId : Nat, inviteCode : ?Nat64) : async Result.Result<Text, Text>{
-    // if (not G.isCustodian(caller, custodians)) {
-    //   return #err("Not authorized");
-    // };
+    if (not G.isCustodian(caller, custodians)) {
+      return #err("Not authorized");
+    };
 
     await* botService.joinChannel(communityCanisterId : Text,  channelId, inviteCode : ?Nat64);
   };
@@ -232,9 +232,9 @@ shared ({ caller }) actor class OCBot() = Self {
 
   //////////////////PROPOSAL BOT
   public shared({caller}) func testSetLastProposalId(proposalId : Nat) : async () {
-    // if (not G.isCustodian(caller, custodians)) {
-    //   return
-    // };
+    if (not G.isCustodian(caller, custodians)) {
+      return
+    };
 
     proposalBotData.lastProposalId := ?proposalId;
   };
@@ -259,9 +259,9 @@ shared ({ caller }) actor class OCBot() = Self {
   };
 
   public shared({caller}) func testClearProposalsLookup() : async (){
-    // if (not G.isCustodian(caller, custodians)) {
-    //   return
-    // };
+    if (not G.isCustodian(caller, custodians)) {
+      return
+    };
     
     Map.clear(proposalBotData.proposalsLookup);
   };
@@ -279,9 +279,9 @@ shared ({ caller }) actor class OCBot() = Self {
   };
 
   public shared({caller}) func testResetState() : async (){
-    // if (not G.isCustodian(caller, custodians)) {
-    //   return
-    // };
+    if (not G.isCustodian(caller, custodians)) {
+      return
+    };
     
     Map.clear(proposalBotData.proposalsLookup);
     proposalBotData.latestNNSMessageIndex := null;
