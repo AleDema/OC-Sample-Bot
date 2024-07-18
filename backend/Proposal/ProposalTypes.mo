@@ -1,26 +1,6 @@
 
 module {
-    public type ProposalId = Nat;
-
-//       public type ProposalInfo = {
-//     id : ?NeuronId;
-//     status : Int32;
-//     topic : Int32;
-//     failure_reason : ?GovernanceError;
-//     ballots : [(Nat64, Ballot)];
-//     proposal_timestamp_seconds : Nat64;
-//     reward_event_round : Nat64;
-//     deadline_timestamp_seconds : ?Nat64;
-//     failed_timestamp_seconds : Nat64;
-//     reject_cost_e8s : Nat64;
-//     derived_proposal_information : ?DerivedProposalInformation;
-//     latest_tally : ?Tally;
-//     reward_status : Int32;
-//     decided_timestamp_seconds : Nat64;
-//     proposal : ?Proposal;
-//     proposer : ?NeuronId;
-//     executed_timestamp_seconds : Nat64;
-//   };
+    public type ProposalId = Nat64;
 
     public type ListProposalArgs = {
         includeRewardStatus :  [Int32];

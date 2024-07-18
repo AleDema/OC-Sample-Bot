@@ -25,7 +25,7 @@ module {
       deadlineTimestampSeconds : ?Nat64;
       proposalTimestampSeconds : Nat64;
   };
-  public type ProposalId = Nat;
+  public type ProposalId = Nat64;
   public type ProposalStatus = {
     #Executed : { #Approved; #Rejected };
     #Pending;

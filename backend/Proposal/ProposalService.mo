@@ -40,7 +40,7 @@ module{
         };
 
 
-        public func listProposalsAfterId(governanceId : Text, _after : ?Nat, args :  PT.ListProposalArgs) : async* Result.Result<GT.ListProposalInfoResponse, Text>{
+        public func listProposalsAfterId(governanceId : Text, _after : ?Nat64, args :  PT.ListProposalArgs) : async* Result.Result<GT.ListProposalInfoResponse, Text>{
             let info = {
                 include_reward_status = args.includeRewardStatus;
                 omit_large_fields =  args.omitLargeFields;
@@ -74,9 +74,9 @@ module{
                         for (proposal in Array.vals(res.proposal_info)){
                             switch((proposal.id)){
                                 case((?p)){
-                                    if(Nat64.toNat(p.id) <= after){
+                                    if(p.id <= after){
                                         check := true;
-                                    } else if (Nat64.toNat(p.id) > after){
+                                    } else if (p.id > after){
                                         proposalBuffer.add(proposal);
                                     };
                                     

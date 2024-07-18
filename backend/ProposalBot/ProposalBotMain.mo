@@ -90,7 +90,7 @@ shared ({ caller }) actor class OCBot() = Self {
     await proposalBot.cancelTimer();
   };
 
-  public shared({caller}) func update(start : ?Nat) : async () {
+  public shared({caller}) func update(start : ?Nat64) : async () {
     if (not G.isCustodian(caller, custodians)) {
       return
     };
@@ -231,7 +231,7 @@ shared ({ caller }) actor class OCBot() = Self {
 
 
   //////////////////PROPOSAL BOT
-  public shared({caller}) func testSetLastProposalId(proposalId : Nat) : async () {
+  public shared({caller}) func testSetLastProposalId(proposalId : Nat64) : async () {
     if (not G.isCustodian(caller, custodians)) {
       return
     };
@@ -239,7 +239,7 @@ shared ({ caller }) actor class OCBot() = Self {
     proposalBotData.lastProposalId := ?proposalId;
   };
 
-  public func testGetLastProposalId() : async ?Nat {
+  public func testGetLastProposalId() : async ?Nat64 {
     proposalBotData.lastProposalId
   };
 
@@ -251,12 +251,12 @@ shared ({ caller }) actor class OCBot() = Self {
   //   proposalBotData.pendingSCMList := List.nil<TT.ProposalAPI>();
   // };
 
-  public func testGetProposalsLookup() : async [{proposalId : Nat; topicId : Int32; messageIndex : ?Nat32; attempts : Nat}] {
-    Map.toArrayMapDesc<Nat, {proposalData : TT.ProposalAPI; messageIndex : ?Nat32; attempts : Nat}, {proposalId : Nat; topicId : Int32; messageIndex : ?Nat32; attempts : Nat}>(proposalBotData.proposalsLookup,
-    func (k, v) : ?{proposalId : Nat; topicId : Int32; messageIndex : ?Nat32; attempts : Nat} {
-      return ?{proposalId = k; topicId = v.proposalData.topicId; messageIndex = v.messageIndex; attempts = v.attempts};
-    });
-  };
+//   public func testGetProposalsLookup() : async [{proposalId : Nat64; topicId : Int32; messageIndex : ?Nat32; attempts : Nat}] {
+//     Map.toArrayMapDesc<Nat, {proposalData : TT.ProposalAPI; messageIndex : ?Nat32; attempts : Nat}, {proposalId : Nat64; topicId : Int32; messageIndex : ?Nat32; attempts : Nat}>(proposalBotData.proposalsLookup,
+//     func (k, v) : ?{proposalId : Nat; topicId : Int32; messageIndex : ?Nat32; attempts : Nat} {
+//       return ?{proposalId = k; topicId = v.proposalData.topicId; messageIndex = v.messageIndex; attempts = v.attempts};
+//     });
+//   };
 
   public shared({caller}) func testClearProposalsLookup() : async (){
     if (not G.isCustodian(caller, custodians)) {

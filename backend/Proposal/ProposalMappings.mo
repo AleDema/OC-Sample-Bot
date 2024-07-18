@@ -64,7 +64,7 @@ module{
         };
 
         #ok({
-            id = Nat64.toNat(id);
+            id = id;
             title = title;
             topicId = nnsProposal.topic;
             description = descr;

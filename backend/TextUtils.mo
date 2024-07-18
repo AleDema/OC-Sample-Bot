@@ -19,7 +19,7 @@ module {
 
 
   public func formatProposal(proposal : TT.ProposalAPI) : Text {
-    var text = "Proposal " # Nat.toText(proposal.id) # "\n";
+    var text = "Proposal " # Nat64.toText(proposal.id) # "\n";
     text := text # "Title: " # proposal.title # "\n";
     text := text # "Topic: " # proposalTopicToText(T.topicIdToVariant(proposal.topicId)) # "\n";
     //add type
@@ -38,9 +38,9 @@ module {
     text
   };
 
-  public func formatProposalThreadMsg(ocGroupId : Text, proposalId : Nat, ocGroupMessageId : ?Nat32) : Text {
-    var text = "Proposal " # Nat.toText(proposalId) # ":\n";
-    text :=  text # "[Dashboard Link](https://dashboard.internetcomputer.org/proposal/" # Nat.toText(proposalId) # ")\n";
+  public func formatProposalThreadMsg(ocGroupId : Text, proposalId : Nat64, ocGroupMessageId : ?Nat32) : Text {
+    var text = "Proposal " # Nat64.toText(proposalId) # ":\n";
+    text :=  text # "[Dashboard Link](https://dashboard.internetcomputer.org/proposal/" # Nat64.toText(proposalId) # ")\n";
     if (Option.isSome(ocGroupMessageId)) {
       text := text # "[OpenChat Link to vote](https://oc.app/group/" # ocGroupId # "/" # Nat32.toText(Option.get(ocGroupMessageId, Nat32.fromNat(0))) # ")" # "\n";
     };

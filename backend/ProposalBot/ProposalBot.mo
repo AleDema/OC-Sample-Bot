@@ -23,7 +23,7 @@ module{
 
     public type Proposal = {proposalData : TT.ProposalAPI; messageIndex : ?Nat32; attempts : Nat};
 
-    public type ProposalsLookup = Map.Map<Nat, Proposal>;
+    public type ProposalsLookup = Map.Map<Nat64, Proposal>;
 
     public type Subscriber = {
         #Group : {topics : [Int32]; groupCanister : Text;};
@@ -32,7 +32,7 @@ module{
 
 
     public type ProposalBotModel = {
-        var lastProposalId : ?Nat;
+        var lastProposalId : ?Nat64;
         var timerId :?Nat;
         var latestNNSMessageIndex : ?Nat32;
         proposalsLookup : ProposalsLookup;
@@ -103,19 +103,19 @@ module{
                     //logService.logInfo("mappedProps size: " # Nat.toText(Array.size(mappedProps)), null);
                     for(proposal in Array.vals(mappedProps)){
                         //logService.logInfo("[Adding to map", null);
-                        Map.set(model.proposalsLookup, nhash, proposal.id, { proposalData = PM.proposalToAPI(proposal); messageIndex = null; attempts = 0});
+                        Map.set(model.proposalsLookup, n64hash, proposal.id, { proposalData = PM.proposalToAPI(proposal); messageIndex = null; attempts = 0});
 
                         if(T.topicIdToVariant(proposal.topicId) == #SCM and (not TU.isSeparateBuildProcess(proposal.title) or Option.isNull(TU.extractGitHash(proposal.title, proposal.description)))){
-                            if(Map.has(model.proposalsLookup, nhash, proposal.id)){
+                            if(Map.has(model.proposalsLookup, n64hash, proposal.id)){
                                // model.pendingSCMList := List.push<TT.ProposalAPI>(PM.proposalToAPI(proposal), model.pendingSCMList);
                                 model.numberOfTicksSinceUpdate := 0;
-                                logService.addLog(#Info, "Pushing to list: " # Nat.toText(proposal.id), null);
+                                logService.addLog(#Info, "Pushing to list: " # Nat64.toText(proposal.id), null);
                             } else {
-                                logService.addLog(#Info, "Already in list" # Nat.toText(proposal.id), null);
+                                logService.addLog(#Info, "Already in list" # Nat64.toText(proposal.id), null);
                             };
                         };
 
-                        if(proposal.id > Option.get(model.lastProposalId, 0) or Option.isNull(model.lastProposalId)){
+                        if(proposal.id > Option.get(model.lastProposalId, Nat64.fromNat(0)) or Option.isNull(model.lastProposalId)){
                             model.lastProposalId := ?(proposal.id);
                         };
                     };
@@ -138,7 +138,7 @@ module{
                     case(#RVM){
                         if(Option.isSome(proposal.messageIndex) or proposal.attempts >= MAX_TICKS_WITHOUT_UPDATE){
                             rvmList := List.push(proposal, rvmList);
-                            Map.delete(model.proposalsLookup, nhash, proposal.proposalData.id);
+                            Map.delete(model.proposalsLookup, n64hash, proposal.proposalData.id);
                         }
                     };
                     case(#SCM){
@@ -147,7 +147,7 @@ module{
                         if(TU.isSeparateBuildProcess(proposal.proposalData.title) or Option.isNull(proposalHash)){
                             if(Option.isSome(proposal.messageIndex) or proposal.attempts >= MAX_TICKS_WITHOUT_UPDATE){
                                 scmList := List.push(proposal, scmList);
-                                Map.delete(model.proposalsLookup, nhash, proposal.proposalData.id);
+                                Map.delete(model.proposalsLookup, n64hash, proposal.proposalData.id);
                             };
                         } else if(not TU.isSeparateBuildProcess(proposal.proposalData.title) and Option.isSome(proposalHash)){
                             let key = Option.get(proposalHash, "");
@@ -166,7 +166,7 @@ module{
                     logService.addLog(#Info, "Sending pending list cause wait for quiet expired", null);
                     scmBatchList := List.push(List.toArray(List.reverse(pList)), scmBatchList);
                     for (p in List.toIter(pList)){
-                        Map.delete(model.proposalsLookup, nhash, p.proposalData.id);
+                        Map.delete(model.proposalsLookup, n64hash, p.proposalData.id);
                     };
 
                 } else if (List.size(pList) > PENDING_SCM_LIMIT){
@@ -176,7 +176,7 @@ module{
                     let l = List.filter(chunks, func(chunk : List.List<Proposal>) : Bool{
                         if(List.size(chunk) == PENDING_SCM_LIMIT){
                             for (p in List.toIter(chunk) ){
-                                Map.delete(model.proposalsLookup, nhash, p.proposalData.id);
+                                Map.delete(model.proposalsLookup, n64hash, p.proposalData.id);
                             };
                             return true;
                         };
@@ -244,7 +244,7 @@ module{
             };
         };
 
-        public func update(after : ?Nat) : async () {
+        public func update(after : ?Nat64) : async () {
             if(updateState == #Running){
                 logService.logWarn("Update already running", ?"[update]");
                 return;
@@ -328,7 +328,7 @@ module{
                     continue attempts;
                 };
                 
-                let tempMap = Map.new<Nat, OC.MessageIndex>();
+                let tempMap = Map.new<Nat64, OC.MessageIndex>();
                 label messages for (message in Array.vals(res.messages)){ 
                     let #ok(proposalData) = botService.getNNSProposalMessageData(message)
                         else {
@@ -337,7 +337,7 @@ module{
                             continue messages;
                         };
                     //logService.addLog(#Info, "Test");
-                    Map.set(tempMap, nhash, Nat64.toNat(proposalData.proposalId), proposalData.messageIndex);
+                    Map.set(tempMap, n64hash, proposalData.proposalId, proposalData.messageIndex);
                 };
 
                 var f = true;
@@ -345,12 +345,12 @@ module{
                     if (Option.isNull(v.messageIndex)){
                         f := false;
                     };
-                    switch(Map.get(tempMap, nhash, k)){
+                    switch(Map.get(tempMap, n64hash, k)){
                         case(?val){
-                            Map.set(pending, nhash, k, {v with messageIndex = ?val});
+                            Map.set(pending, n64hash, k, {v with messageIndex = ?val});
                         };
                         case(_){
-                            Map.set(pending, nhash, k, {v with attempts = v.attempts + 1});
+                            Map.set(pending, n64hash, k, {v with attempts = v.attempts + 1});
                         }
                     }
                 };
