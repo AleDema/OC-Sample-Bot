@@ -52,7 +52,7 @@ shared ({ caller }) actor class OCBot() = Self {
   stable let botData = BS.initModel();
   let ocService = OCS.OCServiceImpl();
   let botService = BS.BotServiceImpl(botData, ocService, logService);
-  let tallyModel = TallyBot.initTallyModel();
+  stable let tallyModel = TallyBot.initTallyModel();
 
   let tallyBot = TallyBot.TallyBot(tallyModel, botService, logService);
 
