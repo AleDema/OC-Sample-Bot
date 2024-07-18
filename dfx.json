@@ -2,11 +2,11 @@
   "canisters": {
     "OCBot": {
       "type": "motoko",
-      "main": "backend/Main.mo"
+      "main": "backend/TallyBot/TallyBotMain.mo"
     },
     "CG_Bot": {
       "type": "motoko",
-      "main": "backend/Main.mo"
+      "main": "backend/ProposalBotMain.mo"
     }
   },
   "defaults": {

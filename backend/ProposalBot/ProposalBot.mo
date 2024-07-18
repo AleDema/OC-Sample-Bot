@@ -69,7 +69,7 @@ module{
         var updateState : UpdateState = #Stopped;
         public func initTimer<system>(_tickrateInSeconds : ?Nat) : async Result.Result<(), Text> {
                     
-            let tickrate : Nat = Option.get(_tickrateInSeconds, 5* 60); // 5 minutes
+            let tickrate : Nat = Option.get(_tickrateInSeconds, 5 * 60); // 5 minutes
             switch(model.timerId){
                 case(?t){ return #err("Timer already created")};
                 case(_){};
@@ -395,6 +395,7 @@ module{
                                     Map.set(model.subscribers, thash, Nat.toText(data.channelId), subscriber);
                                 };
                                 case(#err(err)){
+                                    //TODO: handle already in comm
                                     return #err(err);
                                 }
                              };
