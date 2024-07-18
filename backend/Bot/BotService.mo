@@ -42,6 +42,7 @@ module {
       var botName = null;
       var botDisplayName = null;
       groups = Map.new<Text, ()>();
+      savedMessages = Map.new<Text, OCApi.MessageId>();
       
       //var lastMessageId = 0;
     }
@@ -455,6 +456,18 @@ module {
           return null;
         };
       };
+    };
+
+    public func saveMessageId(key : Text, messageid : OCApi.MessageId) :(){
+      Map.set(botModel.savedMessages, thash, key, messageid);
+    };
+
+    public func getMessageId(key : Text) : ?OCApi.MessageId{
+      return Map.get(botModel.savedMessages, thash, key);
+    };
+
+    public func deleteMessageId(key : Text) :(){
+      Map.delete(botModel.savedMessages, thash, key);
     };
 
 

@@ -16,6 +16,7 @@ module {
 
     public type BotModel= {
         groups : Map.Map<Text, ()>;
+        savedMessages : Map.Map<Text, OCApi.MessageId>;
         var botStatus : BotStatus;
         var botName : ?Text;
         var botDisplayName : ?Text;
