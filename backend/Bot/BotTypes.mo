@@ -28,8 +28,8 @@ module {
         joinGroup : (groupCanisterId : Text, inviteCode : ?Nat64) -> async* Result.Result<Text, Text>;
         sendGroupMessage : (groupCanisterId : Text, content : OCApi.MessageContentInitial, threadIndexId : ?Nat32) -> async* Result.Result<T.SendMessageResponse, Text>;
         sendTextGroupMessage : (groupCanisterId : Text, content : Text, threadIndexId : ?Nat32) -> async* Result.Result<T.SendMessageResponse, Text>;
-        editGroupMessage : (groupCanisterId : Text, messageId : OCApi.MessageId, newContent : OCApi.MessageContentInitial) -> async* Result.Result<OCApi.EditMessageResponse, Text>;
-        editTextGroupMessage : (groupCanisterId : Text, messageId : OCApi.MessageId, newContent : Text) -> async* Result.Result<OCApi.EditMessageResponse, Text>;
+        editGroupMessage : (groupCanisterId : Text, messageId : OCApi.MessageId, threadRootIndex : ?OCApi.MessageIndex,  newContent : OCApi.MessageContentInitial) -> async* Result.Result<OCApi.EditMessageResponse, Text>;
+        editTextGroupMessage : (groupCanisterId : Text, messageId : OCApi.MessageId, threadRootIndex : ?OCApi.MessageIndex, newContent : Text) -> async* Result.Result<OCApi.EditMessageResponse, Text>;
         getGroupMessagesByIndex : (groupCanisterId : Text, indexes : [Nat32] ,latest_known_update : ?Nat64) -> async* Result.Result<OCApi.MessagesResponse, Text>;
         getNNSProposalMessageData : (message : OCApi.MessageEventWrapper) -> Result.Result<{proposalId : OCApi.ProposalId; messageIndex : OCApi.MessageIndex}, Text>;
         getLatestGroupMessageIndex : (groupCanisterId : Text) -> async* ?OCApi.MessageIndex;

@@ -369,8 +369,8 @@ module {
       await* sendGroupMessage(groupCanisterId, #Text({text = content}), threadIndexId);
     };
 
-    public func editGroupMessage(groupCanisterId : Text, messageId : OCApi.MessageId, newContent : OCApi.MessageContentInitial) : async* Result.Result<OCApi.EditMessageResponse, Text>{
-      let #ok(res) = await* ocService.editGroupMessage(groupCanisterId, messageId, newContent)
+    public func editGroupMessage(groupCanisterId : Text, messageId : OCApi.MessageId, threadRootIndex : ?OCApi.MessageIndex, newContent : OCApi.MessageContentInitial) : async* Result.Result<OCApi.EditMessageResponse, Text>{
+      let #ok(res) = await* ocService.editGroupMessage(groupCanisterId, messageId, threadRootIndex, newContent)
       else{
         return #err("Trapped");
       };
@@ -378,8 +378,8 @@ module {
       #ok(res);
     };
 
-    public func editTextGroupMessage(groupCanisterId : Text, messageId : OCApi.MessageId, newContent : Text) : async* Result.Result<OCApi.EditMessageResponse, Text>{
-      await* editGroupMessage(groupCanisterId, messageId, #Text({text = newContent}));
+    public func editTextGroupMessage(groupCanisterId : Text, messageId : OCApi.MessageId, threadRootIndex : ?OCApi.MessageIndex, newContent : Text) : async* Result.Result<OCApi.EditMessageResponse, Text>{
+      await* editGroupMessage(groupCanisterId, messageId, threadRootIndex, #Text({text = newContent}));
     };
 
     public func getGroupMessagesByIndex(groupCanisterId : Text, indexes : [Nat32] ,latest_known_update : ?Nat64) : async* Result.Result<OCApi.MessagesResponse, Text> {

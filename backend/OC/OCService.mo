@@ -98,12 +98,12 @@ public class OCServiceImpl() {
       };  
     };
 
-    public func editGroupMessage(groupCanisterId :Text, messageId : OCApi.MessageId, newContent : OCApi.MessageContentInitial) : async* Result.Result<OCApi.EditMessageResponse, Text> {
+    public func editGroupMessage(groupCanisterId :Text, messageId : OCApi.MessageId, threadRootIndex : ?OCApi.MessageIndex, newContent : OCApi.MessageContentInitial) : async* Result.Result<OCApi.EditMessageResponse, Text> {
       try{
         let group_canister : OCApi.GroupIndexCanister = actor (groupCanisterId);
         let res = await group_canister.edit_message_v2({
           message_id = messageId;
-          thread_root_message_index = null;
+          thread_root_message_index = threadRootIndex;
           content = newContent;
           correlation_id= 0;
           new_achievement = false;
