@@ -39,8 +39,6 @@ import Prng "mo:prng";
 import TallyTypes "./TallyTypes";
 import TallyBot "./TallyBot";
 
-  //TODO connect with OC msg index for GAAS
-
 shared ({ caller }) actor class OCBot() = Self {
 
   let NNS_PROPOSAL_GROUP_ID = "labxu-baaaa-aaaaf-anb4q-cai";
@@ -54,8 +52,9 @@ shared ({ caller }) actor class OCBot() = Self {
   stable let botData = BS.initModel();
   let ocService = OCS.OCServiceImpl();
   let botService = BS.BotServiceImpl(botData, ocService, logService);
+  let tallyModel = TallyBot.initTallyModel();
 
-  let tallyBot = TallyBot.TallyBot(botService, logService);
+  let tallyBot = TallyBot.TallyBot(tallyModel, botService, logService);
 
   //////////////////////////
   ////////////////// TALLY BOT
@@ -70,51 +69,21 @@ shared ({ caller }) actor class OCBot() = Self {
     tallyBot.toggleNNSGroup()
    };
 
-   public func testGetProposalMessage(proposalId : Nat) : async Result.Result<Text, Text> {
 
-    var index = switch(await* botService.getLatestGroupMessageIndex(NNS_PROPOSAL_GROUP_ID)){
-        case(?index){index};
-        case(_){
-            logService.addLog(#Info, "getLatestMessageIndex error", null);
-            return #err("Error")
-        };
+   public func testMatchProposalsWithMessages( proposals : [Nat64], maxEmptyRounds : ?Nat) : async Result.Result<[(Nat64, OCApi.MessageIndex)], Text>{
+    let proposalSet = Map.new<Nat64, ()>();
+    for(proposal in proposals.vals()) {
+        Map.set(proposalSet, n64hash, proposal, ());
     };
 
-    let #ok(res) = await* botService.getGroupMessagesByIndex(NNS_PROPOSAL_GROUP_ID, [index], null)
+    let #ok(res) = await* tallyBot.matchProposalsWithMessages(NNS_PROPOSAL_GROUP_ID, proposalSet, maxEmptyRounds)
     else{
-      return #err("Error getGroupMessagesByIndex");
+        return #err("Error matching proposals with messages");
     };
-    
-    for (message in Array.vals(res.messages)){
-        switch(botService.getNNSProposalMessageData(message)){
-          case(#ok(proposalData)){
-            if (proposalId > Nat64.toNat(proposalData.proposalId)){
-              return #err("not yet in group")
-            };
 
-            let diff = Nat64.toNat(proposalData.proposalId) - proposalId ;
-            let #ok(res) = await* botService.getGroupMessagesByIndex(NNS_PROPOSAL_GROUP_ID, [index - Nat32.fromNat(diff)], null)
-            else{
-              return #err("Error getGroupMessagesByIndex");
-            };
-            for (message in Array.vals(res.messages)){
-              switch(botService.getNNSProposalMessageData(message)){
-                case(#ok(proposalData)){
-                  return #ok(Nat64.toText(proposalData.proposalId));
-                };
-                case(_){
-                  return #err("Error getNNSProposalMessageData")
-                };
-              };
-            };
-          };
-          case(_){
-          return #err("Error getNNSProposalMessageData")
-        };
-        };
-    };
-    #ok("not found")
-  };
+    #ok(List.toArray(res));
+   };
+
 
   //////////////////////////
   ////////////////// ADMIN
