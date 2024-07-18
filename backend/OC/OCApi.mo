@@ -1438,6 +1438,7 @@ module {
       rules_accepted : ?Nat32;
       message_filter_failed : ?Nat64;
       correlation_id : Nat64;
+      new_achievement : Bool;
       block_level_markdown : Bool;
   };
 
@@ -1465,6 +1466,7 @@ module {
       thread_root_message_index : ?Nat32;
       message_id : MessageId;
       content : MessageContentInitial;
+      new_achievement : Bool;
       correlation_id : Nat64;
   };
 
@@ -1548,6 +1550,7 @@ module {
    community_rules_accepted: ?Version;
    channel_rules_accepted: ?Version;
    message_filter_failed: ?Nat64;
+   new_achievement : Bool;
 };
 
 public type  VerifiedCredentialGateArgs = {

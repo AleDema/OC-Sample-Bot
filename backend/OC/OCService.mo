@@ -63,6 +63,7 @@ public class OCServiceImpl() {
           message_filter_failed = null;
           correlation_id= 0;
           block_level_markdown = false;
+          new_achievement = false;
         });
         return #ok(res)
       }  catch(e){
@@ -89,7 +90,7 @@ public class OCServiceImpl() {
           block_level_markdown = false;
           community_rules_accepted= null;
           channel_rules_accepted = null;
-
+          new_achievement = false;
         });
         return #ok(res)
       }  catch(e){
@@ -105,6 +106,7 @@ public class OCServiceImpl() {
           thread_root_message_index = null;
           content = newContent;
           correlation_id= 0;
+          new_achievement = false;
         });
 
         #ok(res);
