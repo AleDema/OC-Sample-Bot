@@ -29,16 +29,16 @@ module{
         var text = "";
         switch(vote){
             case(#Yes){
-                text := text # "Approved";
+                text := text # "Approved"; // U+2705
             };
             case(#No){
-                text := text # "Rejected";
+                text := text # "Rejected"; //U+274C
             }; 
             case(#Abstained){
-                text := text # "Abstained";
+                text := text # "Abstained"; //U+1F634
             };
             case(#Pending){
-                text := text # "Pending";
+                text := text # "Pending"; //U+231B
             };
         };
 
@@ -92,6 +92,10 @@ module{
             shouldPostInNNSGroup
         };
 
+        func generateMsgKey(target : Text, tallyId : TallyTypes.TallyId, proposalId : Nat64) : Text{
+            target # "_" # tallyId # "_" # Nat64.toText(proposalId);
+        };
+
         let targets : [Text] = [TEST_GROUP_ID, NNS_PROPOSAL_GROUP_ID];
 
         public func tallyUpdate(feed : [TallyTypes.TallyFeed]) : async (){
@@ -102,7 +106,7 @@ module{
                 let tempSet = Map.new<Nat64, ()>();
                 for(tally in feed.vals()){
                     for(ballot in tally.ballots.vals()){
-                        let msgKey = NNS_PROPOSAL_GROUP_ID # tally.tallyId # Nat64.toText(ballot.proposalId);
+                        let msgKey = generateMsgKey(NNS_PROPOSAL_GROUP_ID, tally.tallyId, ballot.proposalId);
                         if(not Option.isSome(botService.getMessageId(msgKey))){
                             Map.set(tempSet, n64hash, ballot.proposalId, ());
                         }
@@ -110,7 +114,7 @@ module{
                 };
                 // check if any isnt in nnsGroupIndexes, if so match them
                 if(Map.size(tempSet) > 0){
-                    let proposalList = await* matchProposalsWithMessages(NNS_PROPOSAL_GROUP_ID, tempSet, null);
+                    let proposalList = await* matchProposalsWithMessages(NNS_PROPOSAL_GROUP_ID, tempSet, ?3);
                     switch(proposalList){
                         case(#ok(proposalList)){
                             // if return list is smaller than input, log error
@@ -132,11 +136,11 @@ module{
 
             //send feeds to subscribers
             label l for(target in targets.vals()){
-                if(not shouldPostInNNSGroup){ continue l;};
+                if(target == NNS_PROPOSAL_GROUP_ID and not shouldPostInNNSGroup){ continue l;};
 
                 for(tally in feed.vals()){
                     for(ballot in tally.ballots.vals()){
-                        let msgKey = TEST_GROUP_ID # tally.tallyId # Nat64.toText(ballot.proposalId);
+                        let msgKey = generateMsgKey(target, tally.tallyId, ballot.proposalId);
                         let textBallot = formatBallot(tally.tallyId, ballot);
                         switch(botService.getMessageId(msgKey)){
                             //if it already exists then edit instead of sending a new message
@@ -145,10 +149,16 @@ module{
                                 if(ballot.tallyVote != #Pending){
                                     botService.deleteMessageId(msgKey);
                                 };
+                                logService.logInfo("Edit tally update: ", null);
 
-                                let _ = await* botService.editTextGroupMessage(TEST_GROUP_ID, id, textBallot);
+                                let res = await* botService.editTextGroupMessage(target, id, textBallot);
+                                switch(res){
+                                    case(#ok(_)){};
+                                    case(#err(err)){};
+                                };
                             };
                             case(_){
+                                 logService.logInfo("no msg id ", null);
                                 let msgIndex = do{
                                     if(target == NNS_PROPOSAL_GROUP_ID){
                                         Map.get(nnsMessageIndexLookup, n64hash, ballot.proposalId)
@@ -156,13 +166,15 @@ module{
                                         null
                                     }
                                 };
-                                let res = await* botService.sendTextGroupMessage(TEST_GROUP_ID, textBallot, msgIndex);
-                                if(ballot.tallyVote != #Pending){
+                                let res = await* botService.sendTextGroupMessage(target, textBallot, msgIndex);
+                                //doesnt make sense to save if consensus has been reached
+                                if(ballot.tallyVote == #Pending){
                                     switch(res){
                                         case(#ok(v)){
                                             switch(v){
                                                 case(#Success(msgData)){
                                                     //save message ids
+                                                    logService.logInfo("save msg id: " # msgKey, null);
                                                     botService.saveMessageId(msgKey, msgData.message_id);
                                                 };
                                                 case(_){
@@ -205,7 +217,7 @@ module{
     var check = true;
     label attempts while (check){
         var end = start - FIND_PROPOSALS_BATCH_SIZE;
-        logService.addLog(#Info, "[matchProposalsWithMessages]start: " #  Nat32.toText(start) # " end: " # Nat32.toText(end), null);
+        //logService.addLog(#Info, "[matchProposalsWithMessages]start: " #  Nat32.toText(start) # " end: " # Nat32.toText(end), null);
         //generate ranges for message indexes to fetch
         let indexVec = Iter.range(Nat32.toNat(end), Nat32.toNat(start)) |> 
                         Iter.map(_, func (n : Nat) : Nat32 {Nat32.fromNat(n)}) |> 
