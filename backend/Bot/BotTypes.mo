@@ -23,7 +23,6 @@ module {
         //var lastMessageId : Nat;
     };
 
-
     public type BotService = {
         initBot: (name : Text, _displayName : ?Text) -> async Result.Result<(), Text>;
         joinGroup : (groupCanisterId : Text, inviteCode : ?Nat64) -> async* Result.Result<Text, Text>;
@@ -37,7 +36,11 @@ module {
 
         joinCommunity : (communityCanisterId : Text, inviteCode : ?Nat64) -> async* Result.Result<Text, Text>;
         joinChannel : (communityCanisterId : Text, channelId: Nat, inviteCode : ?Nat64) -> async* Result.Result<Text, Text>;
-        sendChannelMessage : (communityCanisterId : Text, channelId: Nat, content : OCApi.MessageContent, threadIndexId : ?Nat32) -> async* Result.Result<OCApi.SendMessageResponse, Text>
+        sendChannelMessage : (communityCanisterId : Text, channelId: Nat, content : OCApi.MessageContent, threadIndexId : ?Nat32) -> async* Result.Result<OCApi.SendMessageResponse, Text>;
+
+        saveMessageId : (key : Text, messageid : OCApi.MessageId) -> ();
+        getMessageId  : (key : Text) -> ?OCApi.MessageId;
+        deleteMessageId : (key : Text) -> ();
     }
 
 
