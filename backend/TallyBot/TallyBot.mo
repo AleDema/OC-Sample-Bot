@@ -325,7 +325,7 @@ module{
         // };
 
         func formatBallot(tallyId : TallyTypes.TallyId, ballot : TallyTypes.Ballot) : Text{
-            var text = "Feed Id: " # tallyId # "\n";
+            var text = "Tally Id: " # tallyId # "\n";
             text := text # "Proposal: " # Nat64.toText(ballot.proposalId) # " " # voteToText(ballot.tallyVote) # "\n";
             for(neuronVote in ballot.neuronVotes.vals()){
                 text := text # "Neuron: " # Nat64.toText(neuronVote.neuronId) # " " # voteToText(neuronVote.vote) # "\n";
