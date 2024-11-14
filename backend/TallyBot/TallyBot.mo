@@ -184,7 +184,7 @@ module {
         };
 
         func sendMessageToSub(message : Text, sub : Sub, msgOrThreadIndex : ?OCApi.MessageIndex) : Result.Result<(), Text> {
-            switch (sub.subType) {
+            switch (sub) {
                 case (#Channel(data)) {
                     let res = sendChannelMessage(data.communityCanisterId, data.channelId, #Text(message), msgOrThreadIndex);
                     switch (res) {
@@ -211,7 +211,7 @@ module {
         };
 
         func editMessageToSub(newMessage : Text, messageId : OCApi.MessageId, sub : Sub, msgOrThreadIndex : ?OCApi.MessageIndex) : Result.Result<(), Text> {
-            switch (sub.subType) {
+            switch (sub) {
                 case (#Channel(data)) {
                     let res = sendChannelMessage(data.communityCanisterId, data.channelId, #Text(message), msgOrThreadIndex);
                     switch (res) {
@@ -240,7 +240,7 @@ module {
 
         public func tallyUpdate(feed : [TallyTypes.TallyFeed]) : async () {
             label l for (tally in feed.vals()) {
-                let #ok(subList) = Result.fromOption(Map.get(tallyModel.subscribersByTally, n64hash, tally.id)) else {
+                let #ok(subList) = Result.fromOption(Map.get(tallyModel.subscribersByTally, n64hash, tally.tallyId)) else {
                     continue l;
                 };
                 for (sub in List.iter(subList)) {
@@ -539,7 +539,7 @@ module {
     func generateMsgKey(sub : Sub, tallyId : TallyTypes.TallyId, proposalId : Nat64) : Text {
         switch (sub) {
             case (#Group(groupId)) {
-                return v # "_" # tallyId # "_" # Nat64.toText(proposalId);
+                return groupId # "_" # tallyId # "_" # Nat64.toText(proposalId);
             };
             case (#Channel(data)) {
                 data.communityCanisterId # Nat.toText(data.channelId) # "_" # tallyId # "_" # Nat64.toText(proposalId);
