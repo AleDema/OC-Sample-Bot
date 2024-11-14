@@ -1377,18 +1377,17 @@ module {
   };
   public type VoteOperation = { #RegisterVote; #DeleteVote };
 
-  
   public type GroupLookupResponse = {
-      #Success;
-      #AlreadyInGroup;
-      #GroupNotFound;
-      #NotInvited;
-      #GateCheckFailed;
-      #ParticipantLimitReached;
-      #Blocked;
-      #UserSuspended;
-      #ChatFrozen;
-      #InternalError : Text;
+    #Success;
+    #AlreadyInGroup;
+    #GroupNotFound;
+    #NotInvited;
+    #GateCheckFailed;
+    #ParticipantLimitReached;
+    #Blocked;
+    #UserSuspended;
+    #ChatFrozen;
+    #InternalError : Text;
   };
 
   public type InitializeBotResponse = {
@@ -1404,14 +1403,13 @@ module {
     #InternalError : Text;
   };
 
-  public type JoinGroupArgs =  {
+  public type JoinGroupArgs = {
     chat_id : Principal;
     invite_code : ?Nat64;
     correlation_id : Nat64;
   };
 
-
-  public type JoinGroupResponse =  {
+  public type JoinGroupResponse = {
     #Success : {};
     #AlreadyInGroupV2 : {};
     #AlreadyInGroup;
@@ -1426,186 +1424,194 @@ module {
     #InternalError : Text;
   };
 
-  public type SendMessageV2Args =  {
-      message_id : Nat;
-      thread_root_message_index : ?Nat32;
-      content : MessageContentInitial;
-      sender_name : Text;
-      sender_display_name : ?Text;
-      replies_to : ?{event_index : Nat32};
-      mentioned : [User];
-      forwarding : Bool;
-      rules_accepted : ?Nat32;
-      message_filter_failed : ?Nat64;
-      correlation_id : Nat64;
-      new_achievement : Bool;
-      block_level_markdown : Bool;
+  public type SendMessageV2Args = {
+    message_id : Nat;
+    thread_root_message_index : ?Nat32;
+    content : MessageContentInitial;
+    sender_name : Text;
+    sender_display_name : ?Text;
+    replies_to : ?{ event_index : Nat32 };
+    mentioned : [User];
+    forwarding : Bool;
+    rules_accepted : ?Nat32;
+    message_filter_failed : ?Nat64;
+    correlation_id : Nat64;
+    new_achievement : Bool;
+    block_level_markdown : Bool;
   };
 
   public type SendMessageResponse = {
-      #Success : {
-          event_index : Nat32;
-          message_index : Nat32;
-      };
-      #ChannelNotFound;
-      #ThreadMessageNotFound;
-      #MessageEmpty;
-      #TextTooLong : Nat32;
-      #InvalidPoll : InvalidPollReason;
-      #NotAuthorized;
-      #UserNotInCommunity;
-      #UserNotInChannel;
-      #UserSuspended;
-      #InvalidRequest : Text;
-      #CommunityFrozen;
-      #RulesNotAccepted;
-      #CommunityRulesNotAccepted;
+    #Success : {
+      event_index : Nat32;
+      message_index : Nat32;
+    };
+    #ChannelNotFound;
+    #ThreadMessageNotFound;
+    #MessageEmpty;
+    #TextTooLong : Nat32;
+    #InvalidPoll : InvalidPollReason;
+    #NotAuthorized;
+    #UserNotInCommunity;
+    #UserNotInChannel;
+    #UserSuspended;
+    #InvalidRequest : Text;
+    #CommunityFrozen;
+    #RulesNotAccepted;
+    #CommunityRulesNotAccepted;
   };
 
   public type EditMessageV2Args = {
-      thread_root_message_index : ?Nat32;
-      message_id : MessageId;
-      content : MessageContentInitial;
-      new_achievement : Bool;
-      correlation_id : Nat64;
+    thread_root_message_index : ?Nat32;
+    message_id : MessageId;
+    content : MessageContentInitial;
+    new_achievement : Bool;
+    correlation_id : Nat64;
   };
 
-  public type EditMessageResponse =  {
-      #Success;
-      #MessageNotFound;
-      #CallerNotInGroup;
-      #UserSuspended;
-      #ChatFrozen;
+  public type EditMessageResponse = {
+    #Success;
+    #MessageNotFound;
+    #CallerNotInGroup;
+    #UserSuspended;
+    #ChatFrozen;
   };
 
+  public type EditChannelMessageResponse = {
+    #Success;
+    #MessageNotFound;
+    #UserNotInCommunity;
+    #UserNotInChannel;
+    #UserSuspended;
+    #UserLapsed;
+    #CommunityFrozen;
+    #ChannelNotFound;
+  };
 
   // public type PublicGroupSummary = {
   //   local_user_index_canister_id : Principal;
   // };
 
-    type C2CReplyContext = {
+  type C2CReplyContext = {
     #ThisChat : MessageId;
     #OtherChat : (Chat, ?MessageIndex, EventIndex);
   };
 
   type HandleMessageArgs = {
-    message_id: MessageId;
-    sender_message_index: MessageIndex;
-    sender_name: Text;
-    content: MessageContent;
-    replies_to: ?C2CReplyContext;
-    forwarding: Bool;
-    correlation_id: Nat64;
-};
-
-
-  type BotMessage = {
-    content: MessageContentInitial;
-    message_id: ?MessageId;
+    message_id : MessageId;
+    sender_message_index : MessageIndex;
+    sender_name : Text;
+    content : MessageContent;
+    replies_to : ?C2CReplyContext;
+    forwarding : Bool;
+    correlation_id : Nat64;
   };
 
- type SuccessResult = {
-    bot_name: Text;
-    bot_display_name: ?Text;
-    messages: [BotMessage];
+  type BotMessage = {
+    content : MessageContentInitial;
+    message_id : ?MessageId;
+  };
+
+  type SuccessResult = {
+    bot_name : Text;
+    bot_display_name : ?Text;
+    messages : [BotMessage];
   };
 
   type Response = {
-    #Success : SuccessResult
+    #Success : SuccessResult;
   };
 
   public type PublicSummarySuccessResult = {
-      summary: PublicGroupSummary
+    summary : PublicGroupSummary;
   };
 
   public type MessagesByMessageIndexArgs = {
     thread_root_message_index : ?MessageIndex;
-    messages: [MessageIndex];
-    latest_known_update: ?Nat64;
+    messages : [MessageIndex];
+    latest_known_update : ?Nat64;
   };
 
   public type MessagesResponse = {
-    messages: [MessageEventWrapper];
-    latest_event_index: EventIndex;
-    chat_last_updated: TimestampMillis;
+    messages : [MessageEventWrapper];
+    latest_event_index : EventIndex;
+    chat_last_updated : TimestampMillis;
   };
 
   public type MessagesByMessageIndexResponse = {
-    #Success: MessagesResponse;
+    #Success : MessagesResponse;
     #CallerNotInGroup;
     #ThreadMessageNotFound;
-    #ReplicaNotUpToDateV2: TimestampMillis;
+    #ReplicaNotUpToDateV2 : TimestampMillis;
   };
-    public type SendChannelMessageArgs = {
-   channel_id: ChannelId;
-   thread_root_message_index: ?MessageIndex;
-   message_id: MessageId;
-   content: MessageContent;
-   sender_name: Text;
-   sender_display_name: ?Text;
-   replies_to: ?GroupReplyContext;
-   mentioned: [User];
-   forwarding: Bool;
-   block_level_markdown: Bool;
-   community_rules_accepted: ?Version;
-   channel_rules_accepted: ?Version;
-   message_filter_failed: ?Nat64;
-   new_achievement : Bool;
-};
+  public type SendChannelMessageArgs = {
+    channel_id : ChannelId;
+    thread_root_message_index : ?MessageIndex;
+    message_id : MessageId;
+    content : MessageContent;
+    sender_name : Text;
+    sender_display_name : ?Text;
+    replies_to : ?GroupReplyContext;
+    mentioned : [User];
+    forwarding : Bool;
+    block_level_markdown : Bool;
+    community_rules_accepted : ?Version;
+    channel_rules_accepted : ?Version;
+    message_filter_failed : ?Nat64;
+    new_achievement : Bool;
+  };
 
-public type  VerifiedCredentialGateArgs = {
-  user_ii_principal: Principal;
-  credential_jwt: Text;
-  ii_origin: Text;
-};
+  public type VerifiedCredentialGateArgs = {
+    user_ii_principal : Principal;
+    credential_jwt : Text;
+    ii_origin : Text;
+  };
 
-public type TransferFromError =  {
-    #BadFee : { expected_fee: Nat };
-    #BadBurn : { min_burn_amount: Nat };
-    #InsufficientFunds :  { balance: Nat };
-    #InsufficientAllowance : { allowance: Nat };
+  public type TransferFromError = {
+    #BadFee : { expected_fee : Nat };
+    #BadBurn : { min_burn_amount : Nat };
+    #InsufficientFunds : { balance : Nat };
+    #InsufficientAllowance : { allowance : Nat };
     #TooOld;
-    #CreatedInFuture :{ ledger_time: Nat64 };
-    #Duplicate :{ duplicate_of: Nat };
+    #CreatedInFuture : { ledger_time : Nat64 };
+    #Duplicate : { duplicate_of : Nat };
     #TemporarilyUnavailable;
-    #GenericError:  { error_code: Nat; message: Text };
-};
+    #GenericError : { error_code : Nat; message : Text };
+  };
 
-type GateCheckFailedReason = {
+  type GateCheckFailedReason = {
     #NotDiamondMember;
     #NoSnsNeuronsFound;
     #NoSnsNeuronsWithRequiredStakeFound;
     #NoSnsNeuronsWithRequiredDissolveDelayFound;
-    #PaymentFailed: TransferFromError;
+    #PaymentFailed : TransferFromError;
     #InsufficientBalance : Nat;
     #FailedVerifiedCredentialCheck : Text;
-};
-
- public type JoinCommunityArgs = {
-    community_id : CommunityId;
-    user_id: UserId;
-    principal: Principal;
-    invite_code: ?Nat64;
-    is_platform_moderator: Bool;
-    is_bot: Bool;
-    diamond_membership_expires_at: ?Int;
-    verified_credential_args:?VerifiedCredentialGateArgs;
   };
 
-   public type JoinChannelArgs = {
+  public type JoinCommunityArgs = {
+    community_id : CommunityId;
+    user_id : UserId;
+    principal : Principal;
+    invite_code : ?Nat64;
+    is_platform_moderator : Bool;
+    is_bot : Bool;
+    diamond_membership_expires_at : ?Int;
+    verified_credential_args : ?VerifiedCredentialGateArgs;
+  };
+
+  public type JoinChannelArgs = {
     community_id : CommunityId;
     channel_id : ChannelId;
-    user_id: UserId;
-    principal: Principal;
-    invite_code: ?Nat64;
-    is_platform_moderator: Bool;
-    is_bot: Bool;
-    diamond_membership_expires_at: ?Int;
-    verified_credential_args:?VerifiedCredentialGateArgs;
+    user_id : UserId;
+    principal : Principal;
+    invite_code : ?Nat64;
+    is_platform_moderator : Bool;
+    is_bot : Bool;
+    diamond_membership_expires_at : ?Int;
+    verified_credential_args : ?VerifiedCredentialGateArgs;
   };
 
-
- public type JoinCommunityResponse = {
+  public type JoinCommunityResponse = {
     #Success : CommunityCanisterCommunitySummary;
     #AlreadyInCommunity : CommunityCanisterCommunitySummary;
     #GateCheckFailed : GateCheckFailedReason;
@@ -1614,9 +1620,9 @@ type GateCheckFailedReason = {
     #MemberLimitReached : Nat32;
     #CommunityFrozen;
     #InternalError : Text;
-};
+  };
 
- public type JoinChannelResponse = {
+  public type JoinChannelResponse = {
     #Success : CommunityCanisterChannelSummary;
     #SuccessJoinedCommunity : CommunityCanisterCommunitySummary;
     #AlreadyInChannel : CommunityCanisterCommunitySummary;
@@ -1629,24 +1635,32 @@ type GateCheckFailedReason = {
     #MemberLimitReached : Nat32;
     #CommunityFrozen;
     #InternalError : Text;
-};
+  };
 
-public type CommunitySummaryResponse={
+  public type CommunitySummaryResponse = {
     #Success : CommunityCanisterCommunitySummary;
     #PrivateCommunity;
-};
+  };
 
-public type UserSummaryResponse = {
-  #Success : UserSummary;
-  #UserNotFound;
-};
+  public type UserSummaryResponse = {
+    #Success : UserSummary;
+    #UserNotFound;
+  };
 
+  public type EditChannelMessageArgs = {
+    channel_id : ChannelId;
+    thread_root_message_index : ?MessageIndex;
+    message_id : MessageId;
+    content : MessageContentInitial;
+    block_level_markdown : ?Bool;
+    new_achievement : Bool;
+  };
 
   //Actors
 
   public type UserIndexCanister = actor {
-    c2c_register_bot : ({username : Text; display_name : ?Text}) -> async InitializeBotResponse;
-    user: query ({user_id : ?UserId; username : ?Text}) -> async UserSummaryResponse;
+    c2c_register_bot : ({ username : Text; display_name : ?Text }) -> async InitializeBotResponse;
+    user : query ({ user_id : ?UserId; username : ?Text }) -> async UserSummaryResponse;
   };
 
   public type LocalUserIndexCanister = actor {
@@ -1654,9 +1668,9 @@ public type UserSummaryResponse = {
   };
 
   public type GroupIndexCanister = actor {
-     public_summary : query ({invite_code : ?Nat64;}) -> async {
-      #Success: PublicSummarySuccessResult;
-      #NotAuthorized
+    public_summary : query ({ invite_code : ?Nat64 }) -> async {
+      #Success : PublicSummarySuccessResult;
+      #NotAuthorized;
     };
     messages_by_message_index : query (MessagesByMessageIndexArgs) -> async (MessagesByMessageIndexResponse);
     send_message_v2 : (SendMessageV2Args) -> async (SendMessageResponse);
@@ -1665,10 +1679,10 @@ public type UserSummaryResponse = {
 
   public type CommunityIndexCanister = actor {
     send_message : (SendChannelMessageArgs) -> async (SendMessageResponse);
+    edit_message : (EditChannelMessageArgs) -> async (EditChannelMessageResponse);
     join_community : (JoinCommunityArgs) -> async (JoinCommunityResponse);
     join_channel : (JoinChannelArgs) -> async (JoinChannelResponse);
-    summary : query ({invite_code: ?Nat64}) -> async (CommunitySummaryResponse);
+    summary : query ({ invite_code : ?Nat64 }) -> async (CommunitySummaryResponse);
   };
 
-}
-
+};
