@@ -25,7 +25,7 @@ import F "../Fixtures";
 import TT "../TrackerTypes";
 import LS "../Log/LogService";
 import LT "../Log/LogTypes";
-import {  nhash; n64hash; n32hash; thash } "mo:map/Map";
+import { nhash; n64hash; n32hash; thash } "mo:map/Map";
 import BT "../Bot/BotTypes";
 import BS "../Bot/BotService";
 import OCS "../OC/OCService";
@@ -60,30 +60,44 @@ shared ({ caller }) actor class OCBot() = Self {
   ////////////////// TALLY BOT
   //////////////////////////
 
-   public func tallyUpdate (feed : [TallyTypes.TallyFeed]) : async (){
-      logService.logInfo("Tally update", null);
-      await tallyBot.tallyUpdate(feed);
-   };
+  public func tallyUpdate(feed : [TallyTypes.TallyFeed]) : async () {
+    logService.logInfo("Tally update", null);
+    await tallyBot.tallyUpdate(feed);
+  };
 
-   public func toggleNNSGroup() : async Bool {
-    tallyBot.toggleNNSGroup()
-   };
+  public func toggleNNSGroup() : async Bool {
+    tallyBot.toggleNNSGroup();
+  };
 
-
-   public func testMatchProposalsWithMessages( proposals : [Nat64], maxEmptyRounds : ?Nat) : async Result.Result<[(Nat64, OCApi.MessageIndex)], Text>{
-    let proposalSet = Map.new<Nat64, ()>();
-    for(proposal in proposals.vals()) {
-        Map.set(proposalSet, n64hash, proposal, ());
+  //join group/channel
+  public shared ({ caller }) func tryJoinCommunity(communityCanisterId : Text, inviteCode : ?Nat64) : async Result.Result<Text, Text> {
+    if (not G.isCustodian(caller, custodians)) {
+      return #err("Not authorized");
     };
 
-    let #ok(res) = await* tallyBot.matchProposalsWithMessages(NNS_PROPOSAL_GROUP_ID, proposalSet, maxEmptyRounds)
-    else{
-        return #err("Error matching proposals with messages");
+    await* botService.joinCommunity(communityCanisterId : Text, inviteCode : ?Nat64);
+  };
+
+  public shared ({ caller }) func tryJoinChannel(communityCanisterId : Text, channelId : Nat, inviteCode : ?Nat64) : async Result.Result<Text, Text> {
+    if (not G.isCustodian(caller, custodians)) {
+      return #err("Not authorized");
+    };
+
+    await* botService.joinChannel(communityCanisterId : Text, channelId, inviteCode : ?Nat64);
+  };
+
+  public func testMatchProposalsWithMessages(proposals : [Nat64], maxEmptyRounds : ?Nat) : async Result.Result<[(Nat64, OCApi.MessageIndex)], Text> {
+    let proposalSet = Map.new<Nat64, ()>();
+    for (proposal in proposals.vals()) {
+      Map.set(proposalSet, n64hash, proposal, ());
+    };
+
+    let #ok(res) = await* tallyBot.matchProposalsWithMessages(NNS_PROPOSAL_GROUP_ID, proposalSet, maxEmptyRounds) else {
+      return #err("Error matching proposals with messages");
     };
 
     #ok(List.toArray(res));
-   };
-
+  };
 
   //////////////////////////
   ////////////////// ADMIN
@@ -98,15 +112,14 @@ shared ({ caller }) actor class OCBot() = Self {
     return #ok("Custodian Added");
   };
 
-  
   //////////////////////////
   ////////////////// METRICS
   //////////////////////////
-  public shared({caller}) func getCanisterStatus() : async Result.Result<MT.CanisterStatus, Text> {
+  public shared ({ caller }) func getCanisterStatus() : async Result.Result<MT.CanisterStatus, Text> {
     if (not G.isCustodian(caller, custodians)) {
       return #err("Not authorized");
     };
-    let management_canister_actor : MT.ManagementCanisterActor = actor("aaaaa-aa");
+    let management_canister_actor : MT.ManagementCanisterActor = actor ("aaaaa-aa");
     let res = await management_canister_actor.canister_status({
       canister_id = Principal.fromActor(Self);
     });
@@ -117,7 +130,7 @@ shared ({ caller }) actor class OCBot() = Self {
       daily_burn = res.idle_cycles_burned_per_day;
       controllers = res.settings.controllers;
     };
-    #ok(canister_status)
+    #ok(canister_status);
   };
 
   //////////////////////////
@@ -127,13 +140,13 @@ shared ({ caller }) actor class OCBot() = Self {
     logService.getLogs(filter);
   };
 
-  public shared({caller}) func clearLogs() : async Result.Result<(), Text> {
+  public shared ({ caller }) func clearLogs() : async Result.Result<(), Text> {
     if (not G.isCustodian(caller, custodians)) {
       return #err("Not authorized");
     };
 
     logService.clearLogs();
-    #ok()
+    #ok();
   };
 
 };
