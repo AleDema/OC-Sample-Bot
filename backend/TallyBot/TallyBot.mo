@@ -54,28 +54,27 @@ module {
 
     type TallyBotModel = {
         nnsGroupIndexes : Map.Map<Nat64, { nnsGroupIndex : OCApi.MessageIndex; dependentTallies : Map.Map<TallyTypes.TallyId, ()> }>;
-        subscribersByTally : Map.Map<Nat64, List.List<Sub>>;
+        subscribersByTally : Map.Map<TallyTypes.TallyId, List.List<Sub>>;
         var shouldPostInNNSGroup : Bool;
     };
 
     public func initTallyModel() : TallyBotModel {
         {
-            subscribersByTally = Map.new<Nat64, List.List<Sub>>();
+            subscribersByTally = Map.new<TallyTypes.TallyId, List.List<Sub>>();
             nnsGroupIndexes = Map.new<ProposalId, { nnsGroupIndex : OCApi.MessageIndex; dependentTallies : Map.Map<TallyTypes.TallyId, ()> }>();
             var shouldPostInNNSGroup = true;
         };
     };
 
     public class TallyBot(tallyModel : TallyBotModel, botService : BT.BotService, logService : LT.LogService) {
-        //let targets : [Text] = [TEST_GROUP_ID, NNS_PROPOSAL_GROUP_ID];
 
-        func addSubscriber(tallyId : Nat64, subscriber : Sub) : Result.Result<(), Text> {
-            switch (Map.get(tallyModel.subscribersByTally, n64hash, tallyId)) {
+        func addSubscriber(tallyId : TallyTypes.TallyId, subscriber : Sub) : Result.Result<(), Text> {
+            switch (Map.get(tallyModel.subscribersByTally, thash, tallyId)) {
                 case (?exists) {
                     let res = List.find<Sub>(
                         exists,
                         func e : Bool {
-                            switch (e.subType, subscriber.subType) {
+                            switch (e, subscriber) {
                                 case (#Channel(v), #Channel(v2)) {
                                     if (v.channelId == v2.channelId and v.communityCanisterId == v2.communityCanisterId) {
                                         return true;
@@ -97,24 +96,24 @@ module {
                     if (Option.isSome(res)) {
                         return #err("Existing sub");
                     };
-                    Map.set(tallyModel.subscribersByTally, n64hash, tallyId, List.push(subscriber, exists));
+                    Map.set(tallyModel.subscribersByTally, thash, tallyId, List.push(subscriber, exists));
                 };
                 case (_) {
-                    Map.set(tallyModel.subscribersByTally, n64hash, tallyId, List.make(subscriber));
+                    Map.set(tallyModel.subscribersByTally, thash, tallyId, List.make(subscriber));
                 };
             };
 
             return #ok();
         };
 
-        func deleteSubscription(tallyId : Nat64, subscriber : Sub) : Result.Result<(), Text> {
-            switch (Map.get(tallyModel.subscribersByTally, n64hash, tallyId)) {
+        func deleteSubscription(tallyId : TallyTypes.TallyId, subscriber : Sub) : Result.Result<(), Text> {
+            switch (Map.get(tallyModel.subscribersByTally, thash, tallyId)) {
                 case (?exists) {
                     var check = false;
                     let newList = List.filter<Sub>(
                         exists,
-                        func e {
-                            switch (e.subType, subscriber.subType) {
+                        func e : Bool{
+                            switch (e, subscriber) {
                                 case (#Channel(v), #Channel(v2)) {
                                     if (v.channelId == v2.channelId and v.communityCanisterId == v2.communityCanisterId) {
                                         check := true;
@@ -137,7 +136,7 @@ module {
                     );
 
                     if (check) {
-                        Map.set(tallyModel.subscribersByTally, n64hash, tallyId, newList);
+                        Map.set(tallyModel.subscribersByTally, thash, tallyId, newList);
                         #ok();
                     } else {
                         return #err("The tally isnt subscribed to this group/channel");
@@ -183,12 +182,12 @@ module {
             };
         };
 
-        func sendMessageToSub(message : Text, sub : Sub, msgOrThreadIndex : ?OCApi.MessageIndex) : Result.Result<(), Text> {
+        func sendMessageToSub(message : Text, sub : Sub, msgOrThreadIndex : ?OCApi.MessageIndex) : async* Result.Result<(), Text> {
             switch (sub) {
                 case (#Channel(data)) {
-                    let res = sendChannelMessage(data.communityCanisterId, data.channelId, #Text(message), msgOrThreadIndex);
+                    let res = await* botService.sendChannelMessage(data.communityCanisterId, data.channelId, #Text({text = message}), msgOrThreadIndex);
                     switch (res) {
-                        case (#ok) {
+                        case (#ok(_)) {
                             return #ok();
                         };
                         case (#err(e)) {
@@ -197,9 +196,9 @@ module {
                     };
                 };
                 case (#Group(id)) {
-                    let res = await* botService.sendTextGroupMessage(id, message, msgIndex);
+                    let res = await* botService.sendTextGroupMessage(id, message, msgOrThreadIndex);
                     switch (res) {
-                        case (#ok) {
+                        case (#ok(_)) {
                             return #ok();
                         };
                         case (#err(e)) {
@@ -210,12 +209,12 @@ module {
             };
         };
 
-        func editMessageToSub(newMessage : Text, messageId : OCApi.MessageId, sub : Sub, msgOrThreadIndex : ?OCApi.MessageIndex) : Result.Result<(), Text> {
+        func editMessageToSub(newMessage : Text, messageId : OCApi.MessageId, sub : Sub, msgOrThreadIndex : ?OCApi.MessageIndex) : async* Result.Result<(), Text> {
             switch (sub) {
                 case (#Channel(data)) {
-                    let res = sendChannelMessage(data.communityCanisterId, data.channelId, #Text(message), msgOrThreadIndex);
+                    let res = await* botService.sendChannelMessage(data.communityCanisterId, data.channelId, #Text({text = newMessage}), msgOrThreadIndex);
                     switch (res) {
-                        case (#ok) {
+                        case (#ok(_)) {
                             return #ok();
                         };
                         case (#err(e)) {
@@ -227,7 +226,7 @@ module {
                     //let res = await* botService.sendTextGroupMessage(id, message, msgIndex);
                     let res = await* botService.editTextGroupMessage(id, messageId, msgOrThreadIndex, newMessage);
                     switch (res) {
-                        case (#ok) {
+                        case (#ok(_)) {
                             return #ok();
                         };
                         case (#err(e)) {
@@ -240,7 +239,7 @@ module {
 
         public func tallyUpdate(feed : [TallyTypes.TallyFeed]) : async () {
             label l for (tally in feed.vals()) {
-                let #ok(subList) = Result.fromOption(Map.get(tallyModel.subscribersByTally, n64hash, tally.tallyId)) else {
+                let #ok(subList) = Result.fromOption(Map.get(tallyModel.subscribersByTally, thash, tally.tallyId)) else {
                     continue l;
                 };
                 for (sub in List.iter(subList)) {
@@ -302,7 +301,6 @@ module {
             //};
         };
 
-    };
 
     // public func tallyUpdate(feed : [TallyTypes.TallyFeed]) : async () {
     //     if (tallyModel.shouldPostInNNSGroup) {
@@ -546,5 +544,5 @@ module {
             };
         };
     };
-
+    };
 };
