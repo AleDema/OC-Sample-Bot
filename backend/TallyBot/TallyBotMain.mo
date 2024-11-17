@@ -60,24 +60,39 @@ shared ({ caller }) actor class OCBot() = Self {
   ////////////////// TALLY BOT
   //////////////////////////
 
-  public func tallyUpdate(feed : [TallyTypes.TallyFeed]) : async () {
+  public shared ({ caller }) func tallyUpdate(feed : [TallyTypes.TallyFeed]) :  async Result.Result<(), Text> {
+    if (not G.isCustodian(caller, custodians)) {
+      return #err("Not authorized");
+    };
+    
     logService.logInfo("Tally update", null);
     await tallyBot.tallyUpdate(feed);
+    #ok();
   };
 
-  public func toggleNNSGroup() : async Bool {
-    tallyBot.toggleNNSGroup();
+  public shared ({ caller }) func toggleNNSGroup() : async Result.Result<Bool, Text> {
+    if (not G.isCustodian(caller, custodians)) {
+      return #err("Not authorized");
+    };
+
+    #ok(tallyBot.toggleNNSGroup());
   };
 
-  public func addSubscriber(tallyId : TallyTypes.TallyId, subscriber : TallyTypes.Sub) : async Result.Result<(), Text>{
+  public shared ({ caller }) func addSubscriber(tallyId : TallyTypes.TallyId, subscriber : TallyTypes.Sub) : async Result.Result<(), Text>{
+    if (not G.isCustodian(caller, custodians)) {
+      return #err("Not authorized");
+    };
     tallyBot.addSubscriber(tallyId, subscriber)
   };
 
-  public func deleteSubscription(tallyId : TallyTypes.TallyId, subscriber : TallyTypes.Sub) : async Result.Result<(), Text> {
+  public shared ({ caller }) func deleteSubscription(tallyId : TallyTypes.TallyId, subscriber : TallyTypes.Sub) : async Result.Result<(), Text> {
+    if (not G.isCustodian(caller, custodians)) {
+      return #err("Not authorized");
+    };
     tallyBot.deleteSubscription(tallyId, subscriber);
   };
 
-  public func getSubscribers(tallyId : ?TallyTypes.TallyId) : async [(TallyTypes.TallyId, [TallyTypes.Sub])] {
+  public shared ({ caller }) func getSubscribers(tallyId : ?TallyTypes.TallyId) : async [(TallyTypes.TallyId, [TallyTypes.Sub])] {
     tallyBot.getSubscribers(tallyId)
   };
 
