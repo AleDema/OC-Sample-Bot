@@ -290,7 +290,7 @@ module {
       };
     };
 
-    public func sendChannelMessage(communityCanisterId : Text, channelId: Nat, content : OCApi.MessageContent, threadIndexId : ?Nat32) : async* Result.Result<OCApi.SendMessageResponse, Text>{
+    public func sendChannelMessage(communityCanisterId : Text, channelId: Nat, content : OCApi.MessageContent, threadIndexId : ?Nat32) : async* Result.Result<T.SendMessageResponse, Text>{
       let seed : Nat64 = Nat64.fromIntWrap(Time.now());
       let rng = Prng.Seiran128();
       rng.init(seed);
@@ -298,12 +298,55 @@ module {
       let res = await* ocService.sendChannelMessage(communityCanisterId, channelId, Option.get(botModel.botName, ""), botModel.botDisplayName, content, id, threadIndexId);
       switch(res){
         case(#ok(data)){
-          return #ok(data)
+          switch(data){
+            case(#Success(response)){
+              #ok(#Success({ response with message_id = id;}))
+            };
+            case(#ChannelNotFound){
+              #ok(#ChannelNotFound)
+            };
+            case(#ThreadMessageNotFound){
+              #ok(#ThreadMessageNotFound)
+            };
+            case(#MessageEmpty){
+              #ok(#MessageEmpty)
+            };
+            case(#TextTooLong(n)){
+              #ok(#TextTooLong(n))
+            };
+            case(#InvalidPoll(reason)){
+              #ok(#InvalidPoll(reason) )
+            };
+            case(#NotAuthorized){
+              #ok(#NotAuthorized)
+            };
+            case(#UserNotInCommunity){
+              #ok(#UserNotInCommunity)
+            };
+            case(#UserNotInChannel){
+              #ok(#UserNotInChannel)
+            };
+            case(#UserSuspended){
+              #ok(#UserSuspended)
+            };
+            case(#InvalidRequest(reason)){
+              #ok(#InvalidRequest(reason))
+            };
+            case(#CommunityFrozen){
+              #ok(#CommunityFrozen)
+            };
+            case(#RulesNotAccepted){
+              #ok(#RulesNotAccepted)
+            };
+            case(#CommunityRulesNotAccepted){
+              #ok(#CommunityRulesNotAccepted)
+            };
+          }
         };
-        case(#err(e)){
-          #err(e)
-        };
-      };
+        case(#err(msg)){
+          #err(msg)
+        }
+      }
     };
 
     public func sendGroupMessage(groupCanisterId : Text, content : OCApi.MessageContentInitial, threadIndexId : ?Nat32) : async* Result.Result<T.SendMessageResponse, Text>{

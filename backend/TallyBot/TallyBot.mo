@@ -15,6 +15,7 @@ import BT "../Bot/BotTypes";
 import LT "../Log/LogTypes";
 import { nhash; n64hash; n32hash; thash } "mo:map/Map";
 import TU "../TextUtils";
+import Util "../Utils";
 import OCApi "../OC/OCApi";
 import T "../Types";
 import PM "../Proposal/ProposalMappings";
@@ -22,7 +23,7 @@ import GU "../Governance/GovernanceUtils";
 import GT "../Governance/GovernanceTypes";
 
 module {
-    let TEST_GROUP_ID = "evg6t-laaaa-aaaar-a4j5q-cai";
+    //let TEST_GROUP_ID = "evg6t-laaaa-aaaar-a4j5q-cai";
     let NNS_PROPOSAL_GROUP_ID = "labxu-baaaa-aaaaf-anb4q-cai";
     let GOVERNANCE_ID = "rrkah-fqaaa-aaaaa-aaaaq-cai";
 
@@ -183,13 +184,13 @@ module {
             };
         };
 
-        func sendMessageToSub(message : Text, sub : Sub, msgOrThreadIndex : ?OCApi.MessageIndex) : async* Result.Result<(), Text> {
+        func sendMessageToSub(sub : Sub, message : Text, msgOrThreadIndex : ?OCApi.MessageIndex) : async* Result.Result<T.SendMessageResponse, Text> {
             switch (sub) {
                 case (#Channel(data)) {
                     let res = await* botService.sendChannelMessage(data.communityCanisterId, data.channelId, #Text({ text = message }), msgOrThreadIndex);
                     switch (res) {
-                        case (#ok(_)) {
-                            return #ok();
+                        case (#ok(d)) {
+                            return #ok(d);
                         };
                         case (#err(e)) {
                             return #err(e);
@@ -199,8 +200,8 @@ module {
                 case (#Group(id)) {
                     let res = await* botService.sendTextGroupMessage(id, message, msgOrThreadIndex);
                     switch (res) {
-                        case (#ok(_)) {
-                            return #ok();
+                        case (#ok(d)) {
+                            return #ok(d);
                         };
                         case (#err(e)) {
                             return #err(e);
@@ -210,7 +211,7 @@ module {
             };
         };
 
-        func editMessageToSub(newMessage : Text, messageId : OCApi.MessageId, sub : Sub, msgOrThreadIndex : ?OCApi.MessageIndex) : async* Result.Result<(), Text> {
+        func editMessageToSub(sub : Sub, newMessage : Text, messageId : OCApi.MessageId, msgOrThreadIndex : ?OCApi.MessageIndex) : async* Result.Result<(), Text> {
             switch (sub) {
                 case (#Channel(data)) {
                     let res = await* botService.sendChannelMessage(data.communityCanisterId, data.channelId, #Text({ text = newMessage }), msgOrThreadIndex);
@@ -224,7 +225,6 @@ module {
                     };
                 };
                 case (#Group(id)) {
-                    //let res = await* botService.sendTextGroupMessage(id, message, msgIndex);
                     let res = await* botService.editTextGroupMessage(id, messageId, msgOrThreadIndex, newMessage);
                     switch (res) {
                         case (#ok(_)) {
@@ -238,12 +238,13 @@ module {
             };
         };
 
-        public func tallyUpdate(feed : [TallyTypes.TallyFeed]) : async () {
+
+        func updateSubscribers(feed : [TallyTypes.TallyFeed]) : async* () {
             label l for (tally in feed.vals()) {
-                let #ok(subList) = Result.fromOption(Map.get(tallyModel.subscribersByTally, thash, tally.tallyId)) else {
+                let #ok(subList) = Util.optToRes(Map.get(tallyModel.subscribersByTally, thash, tally.tallyId)) else {
                     continue l;
                 };
-                for (sub in List.iter(subList)) {
+                for (sub in List.toIter(subList)) {
                     for (ballot in tally.ballots.vals()) {
                         let msgKey = generateMsgKey(sub, tally.tallyId, ballot.proposalId);
                         let textBallot = formatBallot(tally.tallyId, ballot);
@@ -251,7 +252,7 @@ module {
                             //if it already exists then edit instead of sending a new message
                             case (?msgId) {
                                 logService.logInfo("Edit tally update: ", null);
-                                let res = await* botService.editTextGroupMessage(sub.id, msgId, null, textBallot);
+                                let res = await* editMessageToSub(sub, textBallot, msgId, null);
                                 switch (res) {
                                     case (#ok(_)) {};
                                     case (#err(err)) {};
@@ -290,24 +291,87 @@ module {
                         };
                     };
                 };
-
-                //notify nnsproposalgroup
-                if (tallyModel.shouldPostInNNSGroup) {
-                    fetchIndexes(feed);
-                    label l for (tally in feed.vals()) {
-                        if (tally.governanceCanister != GOVERNANCE_ID) {
-                            continue l;
-                        };
-                        for (ballot in tally.ballots.vals()) {
-
-                        };
-                    };
-                };
-
             };
         };
 
-        func fetchIndexes(feed : [TallyTypes.TallyFeed]) : () {
+
+        func updateNNSGroup(feed : [TallyTypes.TallyFeed]) : async* () {
+            //notify nnsproposalgroup
+            if (tallyModel.shouldPostInNNSGroup) {
+                await* fetchIndexes(feed);
+                label l for (tally in feed.vals()) {
+                    if (tally.governanceCanister != GOVERNANCE_ID) {
+                        continue l;
+                    };
+                    for (ballot in tally.ballots.vals()) {
+                        let msgKey = generateMsgKey(#Group NNS_PROPOSAL_GROUP_ID, tally.tallyId, ballot.proposalId);
+                        let textBallot = formatBallot(tally.tallyId, ballot);
+                        switch (botService.getMessageId(msgKey)) {
+                            //if it already exists then edit instead of sending a new message
+                            case (?id) {
+                                logService.logInfo("Edit tally update: ", null);
+
+                                let msgIndex = getMsgIndex(NNS_PROPOSAL_GROUP_ID, ballot.proposalId);
+                                if (not Option.isSome(msgIndex)) {
+                                    continue l;
+                                };
+
+                                let res = await* botService.editTextGroupMessage(NNS_PROPOSAL_GROUP_ID, id, msgIndex, textBallot);
+                                switch (res) {
+                                    case (#ok(_)) {};
+                                    case (#err(err)) {};
+                                };
+                                //once tally reaches consensus, delete message id and reduce index dependency by one
+                                if (ballot.tallyVote != #Pending) {
+                                    botService.deleteMessageId(msgKey);
+                                    removeIndexDependency(ballot.proposalId, tally.tallyId);
+                                };
+                            };
+                            case (_) {
+                                logService.logInfo("no msg id ", null);
+                                let msgIndex = getMsgIndex(NNS_PROPOSAL_GROUP_ID, ballot.proposalId);
+                                if (not Option.isSome(msgIndex)) {
+                                    continue l;
+                                };
+
+                                let res = await* botService.sendTextGroupMessage(NNS_PROPOSAL_GROUP_ID, textBallot, msgIndex);
+                                //doesnt make sense to save if consensus has been reached
+                                if (ballot.tallyVote == #Pending) {
+                                    switch (res) {
+                                        case (#ok(v)) {
+                                            switch (v) {
+                                                case (#Success(msgData)) {
+                                                    //save message ids
+                                                    logService.logInfo("save msg id: " # msgKey, null);
+                                                    botService.saveMessageId(msgKey, msgData.message_id);
+                                                };
+                                                case (_) {
+                                                    logService.logError("OC error", null);
+                                                };
+                                            };
+
+                                        };
+                                        case (#err(err)) {
+                                            logService.logError("Error sending tally update: " # err, null);
+                                        };
+                                    };
+                                } else {
+                                    logService.logInfo("line 226 " # msgKey, null);
+                                    removeIndexDependency(ballot.proposalId, tally.tallyId);
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+        }; 
+
+        public func tallyUpdate(feed : [TallyTypes.TallyFeed]) : async () {
+            await* updateSubscribers(feed);
+            await* updateNNSGroup(feed);
+        };
+
+        func fetchIndexes(feed : [TallyTypes.TallyFeed]) : async* () {
             let tempSet = Map.new<Nat64, ()>();
             let tallyIdsByProposal = Map.new<Nat64, List.List<TallyTypes.TallyId>>();
             label l for (tally in feed.vals()) {
@@ -352,9 +416,7 @@ module {
                         for (proposal in List.toIter(proposalList)) {
                             //this is required due to the async nature of this method to prevent reentrancy issues
                             switch (Map.get(tallyModel.nnsGroupIndexes, n64hash, proposal.0)) {
-                                case (?msgIndex) {
-
-                                };
+                                case (?msgIndex) {};
                                 case (_) {
                                     logService.logInfo("Setting msg index for proposal: " # Nat64.toText(proposal.0), null);
                                     let newMap : Map.Map<TallyTypes.TallyId, ()> = Map.new<TallyTypes.TallyId, ()>();
@@ -380,154 +442,6 @@ module {
                 };
             };
         };
-
-        // public func tallyUpdate(feed : [TallyTypes.TallyFeed]) : async () {
-        //     if (tallyModel.shouldPostInNNSGroup) {
-        //         let tempSet = Map.new<Nat64, ()>();
-        //         let tallyIdsByProposal = Map.new<Nat64, List.List<TallyTypes.TallyId>>();
-        //         for (tally in feed.vals()) {
-        //             for (ballot in tally.ballots.vals()) {
-        //                 switch (Map.get(tallyIdsByProposal, n64hash, ballot.proposalId)) {
-        //                     case (?tallyIds) {
-        //                         Map.set(tallyIdsByProposal, n64hash, ballot.proposalId, List.push(tally.tallyId, tallyIds));
-        //                     };
-        //                     case (_) {
-        //                         Map.set(tallyIdsByProposal, n64hash, ballot.proposalId, List.make(tally.tallyId));
-        //                     };
-        //                 };
-        //                 //if the proposal already has a msg index then we add the counter for the proposal deending on it iff the tally will need to be posted again
-        //                 switch (Map.get(tallyModel.nnsGroupIndexes, n64hash, ballot.proposalId)) {
-        //                     case (?msgIndex) {
-        //                         if (ballot.tallyVote == #Pending) {
-        //                             logService.logInfo("Updating msg index dependency count for proposal: " # Nat64.toText(ballot.proposalId), null);
-        //                             Map.set(msgIndex.dependentTallies, thash, tally.tallyId, ());
-        //                         };
-        //                     };
-        //                     case (_) {
-        //                         //if there is no msg index then we add it to the list to fetch
-        //                         Map.set(tempSet, n64hash, ballot.proposalId, ());
-        //                     };
-        //                 };
-        //             };
-        //         };
-        //         // check if any isnt in nnsGroupIndexes, if so match them
-        //         if (Map.size(tempSet) > 0) {
-        //             let proposalList = await* matchProposalsWithMessages(NNS_PROPOSAL_GROUP_ID, tempSet, ?3);
-        //             logService.logInfo(" check if any isnt in nnsGroupIndexes, if so match them", null);
-        //             switch (proposalList) {
-        //                 case (#ok(proposalList)) {
-        //                     // if return list is smaller than input, log error
-        //                     if (Map.size(tempSet) > List.size(proposalList)) {
-        //                         logService.logError("Error matching proposals with messages: Return list is smaller than input", ?"[tallyUpdate]");
-        //                     };
-
-        //                     for (proposal in List.toIter(proposalList)) {
-        //                         //this is required due to the async nature of this method to prevent reentrancy issues
-        //                         switch (Map.get(tallyModel.nnsGroupIndexes, n64hash, proposal.0)) {
-        //                             case (?msgIndex) {
-
-        //                             };
-        //                             case (_) {
-        //                                 logService.logInfo("Setting msg index for proposal: " # Nat64.toText(proposal.0), null);
-        //                                 let newMap : Map.Map<TallyTypes.TallyId, ()> = Map.new<TallyTypes.TallyId, ()>();
-        //                                 switch (Map.get(tallyIdsByProposal, n64hash, proposal.0)) {
-        //                                     case (?tallyIds) {
-        //                                         for (tallyId in List.toIter(tallyIds)) {
-        //                                             Map.set(newMap, thash, tallyId, ());
-        //                                         };
-        //                                     };
-        //                                     case (_) {
-
-        //                                     };
-        //                                 };
-        //                                 //Map.set(newMap, thash, tally.tallyId, ());
-        //                                 Map.set(tallyModel.nnsGroupIndexes, n64hash, proposal.0, { nnsGroupIndex = proposal.1; dependentTallies = newMap });
-        //                             };
-        //                         };
-        //                     };
-
-        //                 };
-        //                 case (#err(err)) {
-        //                     logService.logError("Error matching proposals with messages: " # err, ?"[tallyUpdate]");
-        //                 };
-        //             };
-        //         };
-        //     };
-
-        //     //send feeds to subscribers
-        //     label l for (target in targets.vals()) {
-        //         if (target == NNS_PROPOSAL_GROUP_ID and not tallyModel.shouldPostInNNSGroup) {
-        //             continue l;
-        //         };
-
-        //         for (tally in feed.vals()) {
-        //             for (ballot in tally.ballots.vals()) {
-        //                 let msgKey = generateMsgKey(target, tally.tallyId, ballot.proposalId);
-        //                 let textBallot = formatBallot(tally.tallyId, ballot);
-        //                 switch (botService.getMessageId(msgKey)) {
-        //                     //if it already exists then edit instead of sending a new message
-        //                     case (?id) {
-        //                         logService.logInfo("Edit tally update: ", null);
-
-        //                         let msgIndex = getMsgIndex(target, ballot.proposalId);
-        //                         if (target == NNS_PROPOSAL_GROUP_ID and not Option.isSome(msgIndex)) {
-        //                             continue l;
-        //                         };
-
-        //                         let res = await* botService.editTextGroupMessage(target, id, msgIndex, textBallot);
-        //                         switch (res) {
-        //                             case (#ok(_)) {};
-        //                             case (#err(err)) {};
-        //                         };
-        //                         //once tally reaches consensus, delete message id and reduce index dependency by one
-        //                         if (ballot.tallyVote != #Pending) {
-        //                             botService.deleteMessageId(msgKey);
-        //                             if (target == NNS_PROPOSAL_GROUP_ID) {
-        //                                 removeIndexDependency(ballot.proposalId, tally.tallyId);
-        //                             };
-        //                         };
-        //                     };
-        //                     case (_) {
-        //                         logService.logInfo("no msg id ", null);
-        //                         let msgIndex = getMsgIndex(target, ballot.proposalId);
-        //                         if (target == NNS_PROPOSAL_GROUP_ID and not Option.isSome(msgIndex)) {
-        //                             continue l;
-        //                         };
-
-        //                         let res = await* botService.sendTextGroupMessage(target, textBallot, msgIndex);
-        //                         //doesnt make sense to save if consensus has been reached
-        //                         if (ballot.tallyVote == #Pending) {
-        //                             switch (res) {
-        //                                 case (#ok(v)) {
-        //                                     switch (v) {
-        //                                         case (#Success(msgData)) {
-        //                                             //save message ids
-        //                                             logService.logInfo("save msg id: " # msgKey, null);
-        //                                             botService.saveMessageId(msgKey, msgData.message_id);
-        //                                         };
-        //                                         case (_) {
-        //                                             logService.logError("OC error", null);
-        //                                         };
-        //                                     };
-
-        //                                 };
-        //                                 case (#err(err)) {
-        //                                     logService.logError("Error sending tally update: " # err, null);
-        //                                 };
-        //                             };
-        //                         } else {
-        //                             logService.logInfo("line 226 " # msgKey, null);
-        //                             if (target == NNS_PROPOSAL_GROUP_ID) {
-        //                                 removeIndexDependency(ballot.proposalId, tally.tallyId);
-        //                             };
-        //                         };
-        //                     };
-        //                 };
-        //             };
-        //         };
-        //     };
-
-        // };
 
         let FIND_PROPOSALS_BATCH_SIZE : Nat32 = 100;
         public func matchProposalsWithMessages(groupId : Text, proposals : Map.Map<Nat64, ()>, maxEmptyRounds : ?Nat) : async* Result.Result<List.List<(Nat64, OCApi.MessageIndex)>, Text> {
@@ -601,7 +515,7 @@ module {
             var text = "Tally Id: " # tallyId # "\n";
             text := text # "Proposal: " # Nat64.toText(ballot.proposalId) # " " # voteToText(ballot.tallyVote) # "\n";
             for (neuronVote in ballot.neuronVotes.vals()) {
-                text := text # "Neuron: " # Nat64.toText(neuronVote.neuronId) # " " # voteToText(neuronVote.vote) # "\n";
+                text := text # "Neuron: " # neuronVote.neuronId # " " # voteToText(neuronVote.vote) # "\n";
             };
             //logService.logInfo("Tally update for " # tallyId # text  , null);
             text;
