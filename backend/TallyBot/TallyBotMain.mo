@@ -78,6 +78,16 @@ shared ({ caller }) actor class OCBot() = Self {
     #ok(tallyBot.toggleNNSGroup());
   };
 
+  public shared ({ caller }) func deleteAllMessageIds() : async Result.Result<(), Text> {
+    if (not G.isCustodian(caller, custodians)) {
+      return #err("Not authorized");
+    };
+
+    botService.deleteAllMessageIds();
+    #ok();
+  };
+
+
   public shared ({ caller }) func addSubscriber(tallyId : TallyTypes.TallyId, subscriber : TallyTypes.Sub) : async Result.Result<(), Text>{
     if (not G.isCustodian(caller, custodians)) {
       return #err("Not authorized");

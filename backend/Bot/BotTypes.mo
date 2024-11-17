@@ -42,6 +42,7 @@ module {
         saveMessageId : (key : Text, messageid : OCApi.MessageId) -> ();
         getMessageId  : (key : Text) -> ?OCApi.MessageId;
         deleteMessageId : (key : Text) -> ();
+        deleteAllMessageIds : () -> ();
     }
 
 

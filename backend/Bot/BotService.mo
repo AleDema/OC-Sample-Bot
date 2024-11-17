@@ -522,6 +522,10 @@ module {
       Map.delete(botModel.savedMessages, thash, key);
     };
 
+    public func deleteAllMessageIds() :(){
+      Map.clear(botModel.savedMessages);
+    };
+
 
   };
 
