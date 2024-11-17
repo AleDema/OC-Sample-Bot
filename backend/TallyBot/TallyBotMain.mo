@@ -70,6 +70,16 @@ shared ({ caller }) actor class OCBot() = Self {
   };
 
   //join group/channel
+
+  public shared ({ caller }) func tryJoinGroup(groupCanisterId : Text, inviteCode : ?Nat64) : async Result.Result<Text, Text> {
+    if (not G.isCustodian(caller, custodians)) {
+      return #err("Not authorized");
+    };
+
+    await* botService.joinGroup(groupCanisterId : Text, inviteCode : ?Nat64);
+  };
+
+
   public shared ({ caller }) func tryJoinCommunity(communityCanisterId : Text, inviteCode : ?Nat64) : async Result.Result<Text, Text> {
     if (not G.isCustodian(caller, custodians)) {
       return #err("Not authorized");
@@ -99,6 +109,29 @@ shared ({ caller }) actor class OCBot() = Self {
     #ok(List.toArray(res));
   };
 
+
+  public shared ({ caller }) func testSendMessageToGroup(groupCanisterId : Text, message : Text, threadIndexId : ?Nat32) : async Result.Result<T.SendMessageResponse, Text> {
+    if (not G.isCustodian(caller, custodians)) {
+      return #err("Not authorized");
+    };
+    await* botService.sendTextGroupMessage(groupCanisterId, message, threadIndexId ) 
+  };
+
+  public shared ({ caller }) func testSendMessageToChannel(communityCanisterId : Text, channelId: Nat, content : OCApi.MessageContent, threadIndexId : ?Nat32) : async Result.Result<T.SendMessageResponse, Text> {
+    if (not G.isCustodian(caller, custodians)) {
+      return #err("Not authorized");
+    };
+    await* botService.sendChannelMessage(communityCanisterId : Text, channelId: Nat, content : OCApi.MessageContent, threadIndexId : ?Nat32)
+  };
+  
+  public shared ({ caller }) func testEditGroupMessage(groupCanisterId : Text, messageId : OCApi.MessageId, threadRootIndex : ?OCApi.MessageIndex, newContent : OCApi.MessageContentInitial) : async Result.Result<OCApi.EditMessageResponse, Text> {
+    if (not G.isCustodian(caller, custodians)) {
+      return #err("Not authorized");
+    };
+    await* botService.editGroupMessage(groupCanisterId : Text, messageId : OCApi.MessageId, threadRootIndex : ?OCApi.MessageIndex, newContent : OCApi.MessageContentInitial)
+  };
+
+
   //////////////////////////
   ////////////////// ADMIN
   //////////////////////////
@@ -110,6 +143,10 @@ shared ({ caller }) actor class OCBot() = Self {
     custodians := List.push(new_custodian, custodians);
 
     return #ok("Custodian Added");
+  };
+
+  public shared ({ caller }) func getCustodians() : async List.List<Principal> {
+    custodians;
   };
 
   //////////////////////////

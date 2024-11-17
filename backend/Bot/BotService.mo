@@ -412,6 +412,15 @@ module {
       await* sendGroupMessage(groupCanisterId, #Text({text = content}), threadIndexId);
     };
 
+    public func editChannelMessage(communityCanisterId : Text, channelId : Nat, messageId : OCApi.MessageId, threadRootIndex : ?OCApi.MessageIndex, newContent : OCApi.MessageContentInitial) : async* Result.Result<OCApi.EditChannelMessageResponse, Text>{
+      let #ok(res) = await* ocService.editChannelMessage(communityCanisterId : Text, channelId : Nat, messageId : OCApi.MessageId, threadRootIndex : ?OCApi.MessageIndex, newContent : OCApi.MessageContentInitial)
+      else{
+        return #err("Trapped");
+      };
+
+      #ok(res);
+    };
+
     public func editGroupMessage(groupCanisterId : Text, messageId : OCApi.MessageId, threadRootIndex : ?OCApi.MessageIndex, newContent : OCApi.MessageContentInitial) : async* Result.Result<OCApi.EditMessageResponse, Text>{
       let #ok(res) = await* ocService.editGroupMessage(groupCanisterId, messageId, threadRootIndex, newContent)
       else{
@@ -453,7 +462,7 @@ module {
             #ok(response.summary.local_user_index_canister_id)
           };
           case (#NotAuthorized(_)){
-            #err("GroupNotFound")
+            #err("NotAuthorized")
           };
         }
         };

@@ -214,7 +214,7 @@ module {
         func editMessageToSub(sub : Sub, newMessage : Text, messageId : OCApi.MessageId, msgOrThreadIndex : ?OCApi.MessageIndex) : async* Result.Result<(), Text> {
             switch (sub) {
                 case (#Channel(data)) {
-                    let res = await* botService.sendChannelMessage(data.communityCanisterId, data.channelId, #Text({ text = newMessage }), msgOrThreadIndex);
+                    let res = await* botService.editChannelMessage(data.communityCanisterId, data.channelId, messageId, msgOrThreadIndex, #Text({ text = newMessage }));
                     switch (res) {
                         case (#ok(_)) {
                             return #ok();

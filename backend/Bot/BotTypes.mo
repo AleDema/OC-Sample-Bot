@@ -37,6 +37,7 @@ module {
         joinCommunity : (communityCanisterId : Text, inviteCode : ?Nat64) -> async* Result.Result<Text, Text>;
         joinChannel : (communityCanisterId : Text, channelId: Nat, inviteCode : ?Nat64) -> async* Result.Result<Text, Text>;
         sendChannelMessage : (communityCanisterId : Text, channelId: Nat, content : OCApi.MessageContent, threadIndexId : ?Nat32) -> async* Result.Result<T.SendMessageResponse, Text>;
+        editChannelMessage : (communityCanisterId : Text, channelId : Nat, messageId : OCApi.MessageId, threadRootIndex : ?OCApi.MessageIndex, newContent : OCApi.MessageContentInitial) -> async* Result.Result<OCApi.EditChannelMessageResponse, Text>;
 
         saveMessageId : (key : Text, messageid : OCApi.MessageId) -> ();
         getMessageId  : (key : Text) -> ?OCApi.MessageId;
