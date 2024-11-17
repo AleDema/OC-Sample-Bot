@@ -69,4 +69,10 @@ module {
     addTally(args : AddTallyArgs) : async Result.Result<TallyId, Text> 
   };
 
+    type SubId = Text;
+    public type Sub = {
+        #Channel : { communityCanisterId : Text; channelId : Nat };
+        #Group : Text;
+    };
+
 }

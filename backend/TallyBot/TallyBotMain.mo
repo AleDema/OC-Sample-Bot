@@ -69,6 +69,18 @@ shared ({ caller }) actor class OCBot() = Self {
     tallyBot.toggleNNSGroup();
   };
 
+  public func addSubscriber(tallyId : TallyTypes.TallyId, subscriber : TallyTypes.Sub) : async Result.Result<(), Text>{
+    tallyBot.addSubscriber(tallyId, subscriber)
+  };
+
+  public func deleteSubscription(tallyId : TallyTypes.TallyId, subscriber : TallyTypes.Sub) : async Result.Result<(), Text> {
+    tallyBot.deleteSubscription(tallyId, subscriber);
+  };
+
+  public func getSubscribers(tallyId : ?TallyTypes.TallyId) : async [(TallyTypes.TallyId, [TallyTypes.Sub])] {
+    tallyBot.getSubscribers(tallyId)
+  };
+
   //join group/channel
 
   public shared ({ caller }) func tryJoinGroup(groupCanisterId : Text, inviteCode : ?Nat64) : async Result.Result<Text, Text> {

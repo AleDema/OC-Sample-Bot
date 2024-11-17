@@ -9,6 +9,7 @@ import Nat "mo:base/Nat";
 import Iter "mo:base/Iter";
 import Nat32 "mo:base/Nat32";
 import Nat64 "mo:base/Nat64";
+import Buffer "mo:base/Buffer";
 import Map "mo:map/Map";
 import TT "../TrackerTypes";
 import BT "../Bot/BotTypes";
@@ -64,13 +65,13 @@ module {
         {
             subscribersByTally = Map.new<TallyTypes.TallyId, List.List<Sub>>();
             nnsGroupIndexes = Map.new<ProposalId, { nnsGroupIndex : OCApi.MessageIndex; dependentTallies : Map.Map<TallyTypes.TallyId, ()> }>();
-            var shouldPostInNNSGroup = true;
+            var shouldPostInNNSGroup = false;
         };
     };
 
     public class TallyBot(tallyModel : TallyBotModel, botService : BT.BotService, logService : LT.LogService) {
 
-        func addSubscriber(tallyId : TallyTypes.TallyId, subscriber : Sub) : Result.Result<(), Text> {
+        public func addSubscriber(tallyId : TallyTypes.TallyId, subscriber : Sub) : Result.Result<(), Text> {
             switch (Map.get(tallyModel.subscribersByTally, thash, tallyId)) {
                 case (?exists) {
                     let res = List.find<Sub>(
@@ -108,7 +109,7 @@ module {
             return #ok();
         };
 
-        func deleteSubscription(tallyId : TallyTypes.TallyId, subscriber : Sub) : Result.Result<(), Text> {
+        public func deleteSubscription(tallyId : TallyTypes.TallyId, subscriber : Sub) : Result.Result<(), Text> {
             switch (Map.get(tallyModel.subscribersByTally, thash, tallyId)) {
                 case (?exists) {
                     var check = false;
@@ -119,26 +120,30 @@ module {
                                 case (#Channel(v), #Channel(v2)) {
                                     if (v.channelId == v2.channelId and v.communityCanisterId == v2.communityCanisterId) {
                                         check := true;
-                                        return true;
+                                        return false;
                                     };
-                                    return false;
+                                    return true;
                                 };
                                 case (#Group(v), #Group(v2)) {
                                     if (Text.equal(v, v2)) {
                                         check := true;
-                                        return true;
+                                        return false;
                                     };
-                                    return false;
+                                    return true;
                                 };
                                 case (_) {
-                                    return false;
+                                    return true;
                                 };
                             };
                         },
                     );
 
                     if (check) {
-                        Map.set(tallyModel.subscribersByTally, thash, tallyId, newList);
+                        if (List.size(newList) == 0) {
+                            Map.delete(tallyModel.subscribersByTally, thash, tallyId);
+                        } else {
+                            Map.set(tallyModel.subscribersByTally, thash, tallyId, newList);
+                        };
                         #ok();
                     } else {
                         return #err("The tally isnt subscribed to this group/channel");
@@ -150,6 +155,30 @@ module {
                 };
             };
         };
+
+        public func getSubscribers(tallyId : ?TallyTypes.TallyId) : [(TallyTypes.TallyId, [Sub])] {
+            let buf = Buffer.Buffer<(TallyTypes.TallyId, [Sub])>(50);
+
+            switch(tallyId) {
+                case (?tallyId) {
+                    switch (Map.get(tallyModel.subscribersByTally, thash, tallyId)) {
+                        case (?list) {
+                            buf.add((tallyId, List.toArray(list)));
+                        };
+                        case (_) {
+                            return [];
+                        };
+                    };
+                };
+                case (_) {
+                    for ((k, v) in Map.entries(tallyModel.subscribersByTally)) {
+                        buf.add((k, List.toArray(v)));
+                    };
+                };
+            };
+            Buffer.toArray(buf);
+        };
+
 
         func getMsgIndex(target : Text, proposalId : ProposalId) : ?OCApi.MessageIndex {
             let def : ?OCApi.MessageIndex = null;
