@@ -276,7 +276,7 @@ module {
                 for (sub in List.toIter(subList)) {
                     for (ballot in tally.ballots.vals()) {
                         let msgKey = generateMsgKey(sub, tally.tallyId, ballot.proposalId);
-                        let textBallot = formatBallot(tally.tallyId, ballot);
+                        let textBallot = formatBallot(tally.tallyId, tally.alias, ballot);
                         switch (botService.getMessageId(msgKey)) {
                             //if it already exists then edit instead of sending a new message
                             case (?msgId) {
@@ -334,7 +334,7 @@ module {
                     };
                     for (ballot in tally.ballots.vals()) {
                         let msgKey = generateMsgKey(#Group NNS_PROPOSAL_GROUP_ID, tally.tallyId, ballot.proposalId);
-                        let textBallot = formatBallot(tally.tallyId, ballot);
+                        let textBallot = formatBallot(tally.tallyId, tally.alias, ballot);
                         switch (botService.getMessageId(msgKey)) {
                             //if it already exists then edit instead of sending a new message
                             case (?id) {
@@ -540,8 +540,14 @@ module {
             #ok(matchedList);
         };
 
-        func formatBallot(tallyId : TallyTypes.TallyId, ballot : TallyTypes.Ballot) : Text {
+        func formatBallot(tallyId : TallyTypes.TallyId, alias : ?Text, ballot : TallyTypes.Ballot) : Text {
             var text = "Tally Id: " # tallyId # "\n";
+            switch(alias) {
+                case (?alias) {
+                    text := text # "Tally Name: " # alias # "\n";
+                };
+                case (_) {};
+            };
             text := text # "Proposal: " # Nat64.toText(ballot.proposalId) # " " # voteToText(ballot.tallyVote) # "\n";
             for (neuronVote in ballot.neuronVotes.vals()) {
                 text := text # "Neuron: " # neuronVote.neuronId # " " # voteToText(neuronVote.vote) # "\n";
