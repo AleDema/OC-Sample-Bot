@@ -60,10 +60,17 @@ shared ({ caller }) actor class OCBot() = Self {
   ////////////////// TALLY BOT
   //////////////////////////
 
-  public shared ({ caller }) func tallyUpdate(feed : [TallyTypes.TallyFeed]) :  async Result.Result<(), Text> {
+  public shared({caller}) func initBot<system>(name : Text, _displayName : ?Text) : async Result.Result<(), Text> {
     if (not G.isCustodian(caller, custodians)) {
-      return #err("Not authorized");
+      return #err("Not authorized: " # Principal.toText(caller));
     };
+    await botService.initBot(name : Text, _displayName : ?Text);
+  };
+
+  public shared ({ caller }) func tallyUpdate(feed : [TallyTypes.TallyFeed]) :  async Result.Result<(), Text> {
+    // if (not G.isCustodian(caller, custodians)) {
+    //   return #err("Not authorized");
+    // };
     
     logService.logInfo("Tally update", null);
     await tallyBot.tallyUpdate(feed);
