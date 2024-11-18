@@ -396,6 +396,8 @@ module {
         }; 
 
         public func tallyUpdate(feed : [TallyTypes.TallyFeed]) : async () {
+
+            logService.logInfo("Running tally update", null);
             await* updateSubscribers(feed);
             await* updateNNSGroup(feed);
         };
