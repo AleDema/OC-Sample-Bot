@@ -42,21 +42,21 @@ dfx canister --network ic create OCBot --with-cycles 12_000_000_000_000
 
 ### Usage
 
-Once the canister has been deployed on mainnet, it can be interacted with either by using DFX or [Candid UI](https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.ic0.app/), if you wish to use the latter, it is first required that the principal si added to the admin list, otherwise management endpoints will not be available.
+Once the canister has been deployed on mainnet, it can be interacted with either by using DFX or [Candid UI](https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.ic0.app/), if you wish to use the latter, it is first required that the principal is added to the admin list, otherwise management endpoints will not be available.
 To do so, use the following command:
 
   ```bash
-  dfx canister call proposal_tracker_backend addCustodian '(principal "${your-principal}")' --ic
+  dfx canister call OCBot addCustodian '(principal "${your-principal}")' --ic
   ```
 
 #### Initiating the bot
 In order to send messages, the canister has to be first registered as an Open Chat bot, this procedure requires the canister having at least 10XDR in cycles in its balance, otherwise it will fail. To do so, use the following command:
   ```bash
     # With both name and displayName
-    dfx canister call proposal_tracker_backend initBot '("bot_name", opt "Display Name")'
+    dfx canister call OCBot initBot '("bot_name", opt "Display Name")'
 
     # With name but no displayName (null case)
-    dfx canister call proposal_tracker_backend initBot '("bot_name", null)'
+    dfx canister call OCBot initBot '("bot_name", null)'
 ```
 
 After the bot has been initiated, it has to be added to a channel/group in order to send messages. If the community is set to private, the bot should first be invited by an admin by using the dedicated UI.
@@ -65,30 +65,30 @@ After the bot has been initiated, it has to be added to a channel/group in order
 The bot can be added to a group by using the following command:
 ```bash
 # With an invite code
-dfx canister call proposal_tracker_backend tryJoinGroup '("abc123", opt 123456789)'
+dfx canister call OCBot tryJoinGroup '("abc123", opt 123456789)'
 
 # Without an invite code (null case)
-dfx canister call proposal_tracker_backend tryJoinGroup '("abc123", null)'
+dfx canister call OCBot tryJoinGroup '("abc123", null)'
 ```
 
 #### Joining a community
 The bot can be added to a community by using the following command:
 ```bash
 # With an invite code
-dfx canister call proposal_tracker_backend tryJoinCommunity '("abc123", opt 123456789)'
+dfx canister call OCBot tryJoinCommunity '("abc123", opt 123456789)'
 
 # Without an invite code (null case)
-dfx canister call proposal_tracker_backend tryJoinCommunity '("abc123", null)'
+dfx canister call OCBot tryJoinCommunity '("abc123", null)'
 ```
 
 #### Joining a channel
 The bot can be added to a channel by using the following command:
 ```bash
 # With an invite code
-dfx canister call proposal_tracker_backend tryJoinChannel '("${community_id}", ${channel_id}, opt 123456789)'
+dfx canister call OCBot tryJoinChannel '("${community_id}", ${channel_id}, opt 123456789)'
 
 # Without an invite code (null case)
-dfx canister call proposal_tracker_backend tryJoinChannel '("${community_id}", ${channel_id}, null)'
+dfx canister call OCBot tryJoinChannel '("${community_id}", ${channel_id}, null)'
 ```
 Once the tally bot has been added to a community, it can be used to send tally updates to them, but in order to do so, it is first required that the community is subscribed to the list of tally IDs.
 
@@ -96,7 +96,7 @@ Once the tally bot has been added to a community, it can be used to send tally u
 The tally bot can be subscribed to a list of tally IDs by using the following command:
 ```bash
 # For Channel subscriber
-dfx canister call proposal_tracker_backend addSubscriber '("your_tally_id", 
+dfx canister call OCBot addSubscriber '("your_tally_id", 
   variant { 
     Channel = record { 
       communityCanisterId = "${community_id}"; 
@@ -106,7 +106,7 @@ dfx canister call proposal_tracker_backend addSubscriber '("your_tally_id",
 )'
 
 # For Group subscriber
-dfx canister call proposal_tracker_backend addSubscriber '("your_tally_id", 
+dfx canister call OCBot addSubscriber '("your_tally_id", 
   variant { 
     Group = "group_canister_id" 
   }
@@ -116,14 +116,14 @@ dfx canister call proposal_tracker_backend addSubscriber '("your_tally_id",
 #### Fetching tally subscriptions
 It is possible to fetch the list of subscriptions for each tally id by using the following command:
 ```bash
-dfx canister call proposal_tracker_backend getSubscribers '(opt "tally_123")'
+dfx canister call OCBot getSubscribers '(opt "tally_123")'
 ```
 The argument is optional, if not provided, all the subscriptions will be returned.
 
 #### Deleting a tally subscription
 ```bash
 # For Channel subscriber
-dfx canister call proposal_tracker_backend deleteSubscription '("your_tally_id", 
+dfx canister call OCBot deleteSubscription '("your_tally_id", 
   variant { 
     Channel = record { 
       communityCanisterId = "${community_id}"; 
@@ -133,7 +133,7 @@ dfx canister call proposal_tracker_backend deleteSubscription '("your_tally_id",
 )'
 
 # For Group subscriber
-dfx canister call proposal_tracker_backend deleteSubscription '("your_tally_id", 
+dfx canister call OCBot deleteSubscription '("your_tally_id", 
   variant { 
     Group = "group_canister_id" 
   }
