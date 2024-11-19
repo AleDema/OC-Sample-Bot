@@ -29,23 +29,20 @@ module {
     let GOVERNANCE_ID = "rrkah-fqaaa-aaaaa-aaaaq-cai";
 
     func voteToText(vote : TallyTypes.Vote) : Text {
-        var text = "";
         switch (vote) {
             case (#Yes) {
-                text := text # "Approved"; // U+2705
+                "🟢";
             };
             case (#No) {
-                text := text # "Rejected"; //U+274C
+               "🔴";
             };
             case (#Abstained) {
-                text := text # "Abstained"; //U+1F634
+                "🟡";
             };
             case (#Pending) {
-                text := text # "Pending"; //U+231B
+                "⚪️";
             };
         };
-
-        text;
     };
 
     type SubId = Text;
@@ -198,7 +195,7 @@ module {
         };
 
         func removeIndexDependency(proposalId : ProposalId, tallyId : TallyTypes.TallyId) : () {
-            logService.logError("Calling reduceIndexDependency on: " # Nat64.toText(proposalId), ?"[reduceIndexDependency]");
+            logService.logInfo("Calling reduceIndexDependency on: " # Nat64.toText(proposalId), ?"[reduceIndexDependency]");
             switch (Map.get(tallyModel.nnsGroupIndexes, n64hash, proposalId)) {
                 case (?msgIndex) {
                     if (Map.has(msgIndex.dependentTallies, thash, tallyId)) {
@@ -287,7 +284,7 @@ module {
                                     case (#err(err)) {};
                                 };
                                 //once tally reaches consensus, delete message id and reduce index dependency by one
-                                if (ballot.tallyVote != #Pending) {
+                                if (isTallyComplete(ballot)) {
                                     botService.deleteMessageId(msgKey);
                                 };
                             };
@@ -296,7 +293,7 @@ module {
                                 //let msgIndex = getMsgIndex(sub.id, ballot.proposalId);
                                 let res = await* sendMessageToSub(sub, textBallot, null);
                                 //doesnt make sense to save if consensus has been reached
-                                if (ballot.tallyVote == #Pending) {
+                                if (not isTallyComplete(ballot)) {
                                     switch (res) {
                                         case (#ok(v)) {
                                             switch (v) {
@@ -351,7 +348,7 @@ module {
                                     case (#err(err)) {};
                                 };
                                 //once tally reaches consensus, delete message id and reduce index dependency by one
-                                if (ballot.tallyVote != #Pending) {
+                                if (isTallyComplete(ballot)) {
                                     botService.deleteMessageId(msgKey);
                                     removeIndexDependency(ballot.proposalId, tally.tallyId);
                                 };
@@ -365,7 +362,7 @@ module {
 
                                 let res = await* botService.sendTextGroupMessage(NNS_PROPOSAL_GROUP_ID, textBallot, msgIndex);
                                 //doesnt make sense to save if consensus has been reached
-                                if (ballot.tallyVote == #Pending) {
+                                if (not isTallyComplete(ballot)) {
                                     switch (res) {
                                         case (#ok(v)) {
                                             switch (v) {
@@ -393,7 +390,16 @@ module {
                     };
                 };
             };
-        }; 
+        };
+
+        func isTallyComplete(ballot : TallyTypes.Ballot) : Bool {
+            for (vote in ballot.neuronVotes.vals()) {
+                if (vote.vote == #Pending) {
+                    return false;
+                };
+            };
+            return true;
+        };
 
         public func tallyUpdate(feed : [TallyTypes.TallyFeed]) : async () {
 
@@ -421,7 +427,8 @@ module {
                     //if the proposal already has a msg index then we add the counter for the proposal deending on it iff the tally will need to be posted again
                     switch (Map.get(tallyModel.nnsGroupIndexes, n64hash, ballot.proposalId)) {
                         case (?msgIndex) {
-                            if (ballot.tallyVote == #Pending) {
+                            //if (ballot.tallyVote == #Pending) {
+                            if (not isTallyComplete(ballot)){
                                 logService.logInfo("Updating msg index dependency count for proposal: " # Nat64.toText(ballot.proposalId), null);
                                 Map.set(msgIndex.dependentTallies, thash, tally.tallyId, ());
                             };
@@ -542,17 +549,21 @@ module {
             #ok(matchedList);
         };
 
-        func formatBallot(tallyId : TallyTypes.TallyId, alias : ?Text, ballot : TallyTypes.Ballot) : Text {
-            var text = "Tally Id: " # tallyId # "\n";
+        public func formatBallot(tallyId : TallyTypes.TallyId, alias : ?Text, ballot : TallyTypes.Ballot) : Text {
+            var text = "";
             switch(alias) {
                 case (?alias) {
                     text := text # "Tally Name: " # alias # "\n";
                 };
-                case (_) {};
+                case (_) {
+                    text := "Tally Id: " # tallyId # "\n";
+                };
             };
-            text := text # "Proposal: " # Nat64.toText(ballot.proposalId) # " " # voteToText(ballot.tallyVote) # "\n";
+            text := text # "Proposal: " # Nat64.toText(ballot.proposalId) # "\n";
+            text := text # "Tally Status: " # voteToText(ballot.tallyVote) # "\n";
+
             for (neuronVote in ballot.neuronVotes.vals()) {
-                text := text # "Neuron: " # neuronVote.neuronId # " " # voteToText(neuronVote.vote) # "\n";
+                text := text # "- " # neuronVote.neuronId # " " # voteToText(neuronVote.vote) # "\n";
             };
             //logService.logInfo("Tally update for " # tallyId # text  , null);
             text;
