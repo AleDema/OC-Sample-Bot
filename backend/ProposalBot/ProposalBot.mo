@@ -364,7 +364,7 @@ module{
             #ok();
         };
 
-        public func addSubscriber(subscriber : Subscriber, inviteCode : ?Nat64) : async* Result.Result<(), Text>{
+        public func addSubscriber(subscriber : Subscriber, inviteCode : ?Nat64, botPrincipal : Principal) : async* Result.Result<(), Text>{
 
             switch(subscriber){
                 case(#Group(data)){
@@ -385,7 +385,7 @@ module{
                     if(Map.has(model.subscribers, thash, Nat.toText(data.channelId))){
                         return #err("Subscriber already exists");
                     };
-                    let res = await* botService.joinCommunity(data.communityCanister, inviteCode : ?Nat64);
+                    let res = await* botService.joinCommunity(data.communityCanister, inviteCode : ?Nat64, botPrincipal);
                     Map.set(model.subscribers, thash, Nat.toText(data.channelId), subscriber); //TODO: fix idl error
                     switch(res){
                         case(#ok(_)){

@@ -103,7 +103,7 @@ shared ({ caller }) actor class OCBot() = Self {
       return #err("Not authorized");
     };
 
-   await* proposalBot.addSubscriber(sub, inviteCode);
+   await* proposalBot.addSubscriber(sub, inviteCode, Principal.fromActor(Self));
   };
 
   public func getSubscribers() : async [PB.Subscriber] {
@@ -131,7 +131,7 @@ shared ({ caller }) actor class OCBot() = Self {
       return #err("Not authorized");
     };
     
-    await* botService.joinCommunity(communityCanisterId : Text, inviteCode : ?Nat64);
+    await* botService.joinCommunity(communityCanisterId : Text, inviteCode : ?Nat64, Principal.fromActor(Self));
   };
 
   public shared({caller}) func tryJoinChannel(communityCanisterId : Text, channelId : Nat, inviteCode : ?Nat64) : async Result.Result<Text, Text>{
