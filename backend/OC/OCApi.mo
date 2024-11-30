@@ -1656,11 +1656,21 @@ module {
     new_achievement : Bool;
   };
 
+  public type SetAvatarArgs =  {
+    avatar_id: ?Nat;
+  };
+
+  public type SetAvatarResponse = {
+    #Success;
+    #UserNotFound;
+  };
+
   //Actors
 
   public type UserIndexCanister = actor {
     c2c_register_bot : ({ username : Text; display_name : ?Text }) -> async InitializeBotResponse;
     user : query ({ user_id : ?UserId; username : ?Text }) -> async UserSummaryResponse;
+    c2c_set_avatar : ({avatar_id: ?Nat}) -> async  {#Success; #UserNotFound;};
   };
 
   public type LocalUserIndexCanister = actor {

@@ -20,11 +20,24 @@ module {
         var botStatus : BotStatus;
         var botName : ?Text;
         var botDisplayName : ?Text;
+        //var avatar : ?OCApi.Document;
         //var lastMessageId : Nat;
     };
 
+    
+  public type SetAvatarArgs =  {
+    avatar : ?OCApi.Document;
+  };
+
+  public type SetAvatarResponse = {
+    #Success;
+    #AvatarTooBig : OCApi.FieldTooLongResult;
+  };
+
     public type BotService = {
         initBot: (name : Text, _displayName : ?Text) -> async Result.Result<(), Text>;
+        setAvatar : (args : SetAvatarArgs) -> async* Result.Result<SetAvatarResponse, Text>;
+
         joinGroup : (groupCanisterId : Text, inviteCode : ?Nat64) -> async* Result.Result<Text, Text>;
         sendGroupMessage : (groupCanisterId : Text, content : OCApi.MessageContentInitial, threadIndexId : ?Nat32) -> async* Result.Result<T.SendMessageResponse, Text>;
         sendTextGroupMessage : (groupCanisterId : Text, content : Text, threadIndexId : ?Nat32) -> async* Result.Result<T.SendMessageResponse, Text>;
@@ -34,7 +47,7 @@ module {
         getNNSProposalMessageData : (message : OCApi.MessageEventWrapper) -> Result.Result<{proposalId : OCApi.ProposalId; messageIndex : OCApi.MessageIndex}, Text>;
         getLatestGroupMessageIndex : (groupCanisterId : Text) -> async* ?OCApi.MessageIndex;
 
-        joinCommunity : (communityCanisterId : Text, inviteCode : ?Nat64) -> async* Result.Result<Text, Text>;
+        joinCommunity : (communityCanisterId : Text, inviteCode : ?Nat64, botPrincipal : Principal) -> async* Result.Result<Text, Text>;
         joinChannel : (communityCanisterId : Text, channelId: Nat, inviteCode : ?Nat64) -> async* Result.Result<Text, Text>;
         sendChannelMessage : (communityCanisterId : Text, channelId: Nat, content : OCApi.MessageContent, threadIndexId : ?Nat32) -> async* Result.Result<T.SendMessageResponse, Text>;
         editChannelMessage : (communityCanisterId : Text, channelId : Nat, messageId : OCApi.MessageId, threadRootIndex : ?OCApi.MessageIndex, newContent : OCApi.MessageContentInitial) -> async* Result.Result<OCApi.EditChannelMessageResponse, Text>;

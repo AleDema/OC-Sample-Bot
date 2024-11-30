@@ -38,14 +38,13 @@ import DateTime "mo:datetime/DateTime";
 import Prng "mo:prng";
 import TallyTypes "./TallyTypes";
 import TallyBot "./TallyBot";
-
 shared ({ caller }) actor class OCBot() = Self {
 
   let NNS_PROPOSAL_GROUP_ID = "labxu-baaaa-aaaaf-anb4q-cai";
   //let TEST_GROUP_ID = "evg6t-laaaa-aaaar-a4j5q-cai";
 
   stable var custodians = List.make<Principal>(caller);
-
+  stable var allowedNotifiers = List.nil<Principal>();
   stable let logs = LS.initLogModel();
   let logService = LS.LogServiceImpl(logs, 100, true);
 
@@ -54,7 +53,73 @@ shared ({ caller }) actor class OCBot() = Self {
   let botService = BS.BotServiceImpl(botData, ocService, logService);
   stable let tallyModel = TallyBot.initTallyModel();
 
+  stable var avatar : ?OCApi.Document = null;
+
   let tallyBot = TallyBot.TallyBot(tallyModel, botService, logService);
+
+      public type HttpRequest = {
+        body: Blob;
+        headers: [HeaderField];
+        method: Text;
+        url: Text;
+    };
+
+    public type HeaderField = (Text, Text);
+
+    public type HttpResponse = {
+        body: Blob;
+        headers: [HeaderField];
+        status_code: Nat16;
+    };
+
+    private func removeQuery(str: Text): Text {
+        return Option.unwrap(Text.split(str, #char '?').next());
+    };
+
+    let CACHE_HEADER_VALUE = "public, max-age=604800, immutable";
+
+    public query func http_request(req: HttpRequest): async (HttpResponse) {
+        let path = removeQuery(req.url);
+        if(path == "/avatar") {
+          switch(avatar) {
+            case (?avatar) {
+              return {
+                status_code = 200;
+                headers = [
+                    ("Content-Type", avatar.mime_type),
+                    ("Cache-Control", CACHE_HEADER_VALUE)
+                ];
+                body = avatar.data;
+                streaming_strategy = null;
+                upgrade = null;
+              }
+
+            };
+            case(_){
+              return {
+                  body = Text.encodeUtf8("No avatar:" # path);
+                  headers = [];
+                  status_code = 404;
+              };
+            };
+          };
+            return {
+                body = Text.encodeUtf8("root page :" # path);
+                headers = [];
+                status_code = 200;
+            };
+        };
+
+        return {
+            body = Text.encodeUtf8("404 Not found :" # path);
+            headers = [];
+            status_code = 404;
+        };
+    };
+
+    public func testUserSummary(userId : ?Principal, username : ?Text) : async Result.Result<OCApi.UserSummaryResponse, Text>{
+    await* ocService.userSummary("4bkt6-4aaaa-aaaaf-aaaiq-cai", {userId = userId; username= username});
+  };
 
   //////////////////////////
   ////////////////// TALLY BOT
@@ -67,10 +132,27 @@ shared ({ caller }) actor class OCBot() = Self {
     await botService.initBot(name : Text, _displayName : ?Text);
   };
 
-  public shared ({ caller }) func tallyUpdate(feed : [TallyTypes.TallyFeed]) :  async Result.Result<(), Text> {
+  public shared ({ caller }) func setAvatar(_avatar : BT.SetAvatarArgs) :  async Result.Result<BT.SetAvatarResponse, Text> {
     // if (not G.isCustodian(caller, custodians)) {
     //   return #err("Not authorized");
     // };
+    avatar := _avatar.avatar;
+    logService.logInfo("setAvatar", null);
+    switch(await* botService.setAvatar(_avatar)){
+      case(#ok(res)){
+        #ok(res);
+      };
+      case(#err(err)){
+        #err(err);
+      };
+    };
+  };
+
+  public shared ({ caller }) func tallyUpdate(feed : [TallyTypes.TallyFeed]) :  async Result.Result<(), Text> {
+    if (not G.isCustodian(caller, allowedNotifiers)) {
+      logService.logWarn("Not authorized call by:  " # Principal.toText(caller),  ?"[tallyUpdate]");
+      return #err("Not authorized");
+    };
     
     logService.logInfo("Tally update", null);
     await tallyBot.tallyUpdate(feed);
@@ -129,7 +211,7 @@ shared ({ caller }) actor class OCBot() = Self {
       return #err("Not authorized");
     };
 
-    await* botService.joinCommunity(communityCanisterId : Text, inviteCode : ?Nat64);
+    await* botService.joinCommunity(communityCanisterId : Text, inviteCode : ?Nat64, Principal.fromActor(Self));
   };
 
   public shared ({ caller }) func tryJoinChannel(communityCanisterId : Text, channelId : Nat, inviteCode : ?Nat64) : async Result.Result<Text, Text> {
@@ -175,10 +257,35 @@ shared ({ caller }) actor class OCBot() = Self {
     await* botService.editGroupMessage(groupCanisterId : Text, messageId : OCApi.MessageId, threadRootIndex : ?OCApi.MessageIndex, newContent : OCApi.MessageContentInitial)
   };
 
+  public shared ({ caller }) func testFormatBallot(groupCanisterId : Text, threadIndexId : ?Nat32, ballot : TallyTypes.Ballot) : async Result.Result<T.SendMessageResponse, Text> {
+    if (not G.isCustodian(caller, custodians)) {
+      return #err("Not authorized");
+    };
+
+    let message = tallyBot.formatBallot("1", ?"Test", ballot);
+
+    await* botService.sendTextGroupMessage(groupCanisterId, message, threadIndexId ) 
+  };
+
 
   //////////////////////////
   ////////////////// ADMIN
   //////////////////////////
+
+  public shared ({ caller }) func addNotifier(new_notifier : Principal) : async Result.Result<Text, Text> {
+    if (not G.isCustodian(caller, custodians)) {
+      return #err("Not authorized");
+    };
+
+    allowedNotifiers := List.push(new_notifier, allowedNotifiers);
+
+    return #ok("Notifier Added");
+  };
+
+  public shared ({ caller }) func getNotifiers() : async List.List<Principal> {
+    allowedNotifiers;
+  };
+
   public shared ({ caller }) func addCustodian(new_custodian : Principal) : async Result.Result<Text, Text> {
     if (not G.isCustodian(caller, custodians)) {
       return #err("Not authorized");

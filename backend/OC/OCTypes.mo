@@ -12,6 +12,7 @@ module {
   public type OCService = {
     registerBot : (userIndexCanister : Text, { username : Text; displayName : ?Text }) -> async* Result.Result<OCApi.InitializeBotResponse, Text>;
     userSummary(userIndexCanister : Text, { userId : ?OCApi.UserId; username : ?Text }) : async* Result.Result<OCApi.UserSummaryResponse, Text>;
+    setAvatar : (userIndexCanister : Text, OCApi.SetAvatarArgs) -> async* Result.Result<OCApi.SetAvatarResponse, Text>;
     publicGroupSummary : (groupCanisterId : Text, args : { invite_code : ?Nat64 }) -> async* Result.Result<PublicSummaryResponse, Text>;
     publicCommunitySummary : (groupCanisterId : Text, args : { invite_code : ?Nat64 }) -> async* Result.Result<OCApi.CommunitySummaryResponse, Text>;
     joinGroup : (groupCanisterId : Text, OCApi.JoinGroupArgs) -> async* Result.Result<OCApi.JoinGroupResponse, Text>;

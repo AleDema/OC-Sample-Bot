@@ -43,7 +43,7 @@ module {
       var botDisplayName = null;
       groups = Map.new<Text, ()>();
       savedMessages = Map.new<Text, OCApi.MessageId>();
-      
+      //var avatar = null;
       //var lastMessageId = 0;
     }
   };
@@ -105,6 +105,49 @@ module {
     };
 
 
+    let MAX_AVATAR_SIZE: Nat = 1024 * 800; // 800KB
+    func validateAvatar(avatar : BT.SetAvatarArgs) : Bool {
+      switch (avatar.avatar) {
+        case(?avatar){
+          if(avatar.data.size() > MAX_AVATAR_SIZE){
+            return false;
+          };
+        };
+        case(_){};
+      };
+      return true;
+    };
+
+    // public func getAvatar() : ?OCApi.Document {
+    //   botModel.avatar
+    // };
+
+    public func setAvatar(args : BT.SetAvatarArgs) : async* Result.Result<BT.SetAvatarResponse, Text>{
+
+      if(not validateAvatar(args)){
+        return #err("Avatar too big");
+      };
+
+      switch(args.avatar){
+        case(?avatar){
+          switch(await* ocService.setAvatar(USER_INDEX_CANISTER, {avatar_id = ?avatar.id})){
+            case(#ok(res)){
+              logService.logInfo("Set Avatar, id: " # Nat.toText(avatar.id) # " mime type : " # avatar.mime_type, null);
+              //botModel.avatar := ?avatar;
+              return #ok(#Success);
+            };
+            case(#err(msg)){
+              return #err("Error: " # msg);
+            };
+          };
+        };
+        case(_){
+          return #err("Avatar not found");
+        };
+
+      };
+    };
+
     public func getBotStatus() : BT.BotStatus {
       botModel.botStatus
     };
@@ -162,14 +205,14 @@ module {
 
 
     //todo; return patterns and create to string method instead
-    public func joinCommunity(communityCanisterId : Text, inviteCode : ?Nat64) : async* Result.Result<Text, Text>{
+    public func joinCommunity(communityCanisterId : Text, inviteCode : ?Nat64, botPrincipal : Principal) : async* Result.Result<Text, Text>{
       let indexCanister = await* localCommunityIndex(communityCanisterId);
       switch(indexCanister){
         case(#ok(id)){
           let res = await* ocService.joinCommunity(Principal.toText(id), { 
             community_id = Principal.fromText(communityCanisterId);
-            user_id = Principal.fromText("7g2oq-raaaa-aaaap-qb7sq-cai");
-            principal= Principal.fromText("7g2oq-raaaa-aaaap-qb7sq-cai");
+            user_id = botPrincipal;
+            principal= botPrincipal;
             invite_code= inviteCode;
             is_platform_moderator = false;
             is_bot= true;

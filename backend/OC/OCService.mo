@@ -3,6 +3,7 @@ import Result "mo:base/Result";
 import Principal "mo:base/Principal";
 import OCTypes "./OCTypes";
 import Error "mo:base/Error";
+import Blob "mo:base/Blob";
 
 module {
   public class OCServiceImpl() {
@@ -14,6 +15,16 @@ module {
           username = username;
           display_name = displayName;
         });
+        return #ok(res);
+      } catch (e) {
+        return #err(Error.message(e));
+      };
+    };
+
+    public func setAvatar(userIndexCanister : Text, avatar: OCApi.SetAvatarArgs) : async* Result.Result<OCApi.SetAvatarResponse, Text>{
+      let user_index : OCApi.UserIndexCanister = actor (userIndexCanister);
+      try {
+        let res = await user_index.c2c_set_avatar(avatar);
         return #ok(res);
       } catch (e) {
         return #err(Error.message(e));
