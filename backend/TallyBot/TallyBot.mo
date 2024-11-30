@@ -270,7 +270,16 @@ module {
                 let #ok(subList) = Util.optToRes(Map.get(tallyModel.subscribersByTally, thash, tally.tallyId)) else {
                     continue l;
                 };
-                for (sub in List.toIter(subList)) {
+                label l1 for (sub in List.toIter(subList)) {
+                    switch(sub) {
+                        case(#Group(id)){
+                            //nns groups has separae code path
+                            if(id == NNS_PROPOSAL_GROUP_ID){
+                                continue l1;
+                            };
+                        };
+                        case(_){};
+                    };
                     for (ballot in tally.ballots.vals()) {
                         let msgKey = generateMsgKey(sub, tally.tallyId, ballot.proposalId);
                         let textBallot = formatBallot(tally.tallyId, tally.alias, ballot);
@@ -329,7 +338,23 @@ module {
                     if (tally.governanceCanister != GOVERNANCE_ID) {
                         continue l;
                     };
-                    for (ballot in tally.ballots.vals()) {
+                    let #ok(subList) = Util.optToRes(Map.get(tallyModel.subscribersByTally, thash, tally.tallyId)) else {
+                        continue l;
+                    };
+                    //if tally is not subscribed to nns group, skip
+                    if(not Option.isSome(List.find<Sub>(subList, func e : Bool {
+                        switch(e){
+                            case(#Group(id)){
+                                return id == NNS_PROPOSAL_GROUP_ID;
+                            };
+                            case(_){
+                                return false;
+                            };
+                        };
+                    }))){
+                        continue l;
+                    };
+                    label l1 for (ballot in tally.ballots.vals()) {
                         let msgKey = generateMsgKey(#Group NNS_PROPOSAL_GROUP_ID, tally.tallyId, ballot.proposalId);
                         let textBallot = formatBallot(tally.tallyId, tally.alias, ballot);
                         switch (botService.getMessageId(msgKey)) {
@@ -339,7 +364,7 @@ module {
 
                                 let msgIndex = getMsgIndex(NNS_PROPOSAL_GROUP_ID, ballot.proposalId);
                                 if (not Option.isSome(msgIndex)) {
-                                    continue l;
+                                    continue l1;
                                 };
 
                                 let res = await* botService.editTextGroupMessage(NNS_PROPOSAL_GROUP_ID, id, msgIndex, textBallot);
@@ -357,7 +382,7 @@ module {
                                 logService.logInfo("no msg id ", null);
                                 let msgIndex = getMsgIndex(NNS_PROPOSAL_GROUP_ID, ballot.proposalId);
                                 if (not Option.isSome(msgIndex)) {
-                                    continue l;
+                                    continue l1;
                                 };
 
                                 let res = await* botService.sendTextGroupMessage(NNS_PROPOSAL_GROUP_ID, textBallot, msgIndex);
