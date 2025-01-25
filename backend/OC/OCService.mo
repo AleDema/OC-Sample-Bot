@@ -139,6 +139,7 @@ module {
           message_id = messageId;
           thread_root_message_index = threadRootIndex;
           content = newContent;
+          block_level_markdown = ?false;
           correlation_id = 0;
           new_achievement = false;
         });

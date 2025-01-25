@@ -1464,6 +1464,7 @@ module {
     thread_root_message_index : ?Nat32;
     message_id : MessageId;
     content : MessageContentInitial;
+    block_level_markdown : ?Bool;
     new_achievement : Bool;
     correlation_id : Nat64;
   };
@@ -1473,6 +1474,7 @@ module {
     #MessageNotFound;
     #CallerNotInGroup;
     #UserSuspended;
+    #UserLapsed;
     #ChatFrozen;
   };
 
